@@ -7,10 +7,12 @@ import {
   RespostaPaginada
 } from '../types/api';
 
-// Usa o proxy local no desenvolvimento para evitar erros de CORS (Failed to fetch)
+// Configuração da URL base da API
+// Em desenvolvimento (npm run dev), usamos '/api/v1' para o proxy do Vite evitar erros de CORS
+// Em produção, usamos a variável de ambiente VITE_API_URL ou o fallback direto
 export const API_BASE_URL = import.meta.env.DEV 
   ? '/api/v1' 
-  : 'https://suport-api.onrender.com/api/v1';
+  : (import.meta.env.VITE_API_URL || 'https://suport-api.onrender.com/api/v1');
 
 // Classe para gerenciar erros da API
 export class ApiError extends Error {

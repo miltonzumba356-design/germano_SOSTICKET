@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
-// Componente de página de login
-export function Login({ onGoToRegister }: { onGoToRegister: () => void }) {
+export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
   const { login } = useAuth();
 
-  // Função para processar o formulário de login
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErro('');
@@ -20,7 +19,7 @@ export function Login({ onGoToRegister }: { onGoToRegister: () => void }) {
       await login(email, password);
     } catch (error: any) {
       console.error('Erro no login:', error);
-      const mensagem = error?.message || 'Email ou senha inválidos. Verifique suas credenciais.';
+      const mensagem = error?.message || 'Credenciais inválidas. Por favor, tente novamente.';
       setErro(mensagem);
     } finally {
       setCarregando(false);
@@ -28,86 +27,132 @@ export function Login({ onGoToRegister }: { onGoToRegister: () => void }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
-        {/* Cabeçalho com logo */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-indigo-600 mb-2">SOSTickect</h1>
-          <p className="text-gray-600">Sistema de Gestão de Suporte</p>
-        </div>
-
-        {/* Formulário de login */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Campo de email */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              placeholder="seu@email.com"
-              required
-            />
+    <div className="min-h-screen flex items-center justify-center bg-[#f0f2f5] font-sans selection:bg-blue-500/30">
+      <div className="w-full max-w-[1050px] h-[680px] bg-white rounded-[48px] overflow-hidden flex shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] border border-white/60 mx-4 relative">
+        
+        {/* Lado Esquerdo: Formulário */}
+        <div className="w-full lg:w-[60%] p-14 flex flex-col justify-between relative z-30">
+          {/* Logo Estilizada */}
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 bg-blue-600 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.3)]"></div>
+            <span className="text-slate-900 font-bold tracking-tight text-lg">SOSTickect<span className="text-blue-600">.</span></span>
           </div>
 
-          {/* Campo de senha */}
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Senha
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          {/* Mensagem de erro */}
-          {erro && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
-              <AlertCircle className="w-5 h-5" />
-              <span className="text-sm">{erro}</span>
+          <div className="space-y-8 relative z-10">
+            <div>
+              <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-3">Bem-vindo de volta</p>
+              <h1 className="text-4xl font-black text-slate-900 tracking-tight">Entrar na conta<span className="text-blue-600">.</span></h1>
             </div>
-          )}
 
-          {/* Botão de submeter */}
-          <button
-            type="submit"
-            disabled={carregando}
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            {carregando ? 'Entrando...' : 'Entrar'}
-          </button>
-        </form>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Campo Email */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Endereço de Email</label>
+                <div className="relative group">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-slate-50 border-2 border-transparent text-slate-900 px-5 py-4 rounded-2xl focus:border-blue-500/30 focus:bg-white transition-all outline-none text-sm placeholder:text-slate-300 font-medium"
+                    placeholder="exemplo@sostickect.pt"
+                    required
+                  />
+                  <Mail className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-blue-600 transition-colors" />
+                </div>
+              </div>
 
-        <div className="mt-4 text-center text-sm">
-          <p className="text-gray-500">
-            Não tem uma conta?{' '}
-            <button 
-              onClick={onGoToRegister}
-              className="text-indigo-600 font-bold hover:underline"
-            >
-              Cadastre-se agora
-            </button>
-          </p>
+              {/* Campo Senha */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center px-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Palavra-passe</label>
+                  <button type="button" className="text-[10px] font-bold text-blue-600 hover:text-blue-700 transition-colors uppercase tracking-tight">Esqueceu a senha?</button>
+                </div>
+                <div className="relative group">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-50 border-2 border-transparent text-slate-900 px-5 py-4 rounded-2xl focus:border-blue-500/30 focus:bg-white transition-all outline-none text-sm placeholder:text-slate-300 font-medium"
+                    placeholder="••••••••••••"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-5 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4 text-slate-300" /> : <Eye className="w-4 h-4 text-slate-300" />}
+                  </button>
+                </div>
+              </div>
+
+              {erro && (
+                <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 animate-in fade-in slide-in-from-top-2">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-xs font-bold">{erro}</span>
+                </div>
+              )}
+
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  className="px-6 py-4 bg-slate-50 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-100 transition-all flex-1"
+                >
+                  Suporte
+                </button>
+                <button
+                  type="submit"
+                  disabled={carregando}
+                  className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 transition-all shadow-[0_10px_20px_rgba(37,99,235,0.15)] flex-[2] flex items-center justify-center gap-2 group"
+                >
+                  {carregando ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      Aceder ao Sistema
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="text-[10px] text-slate-300 font-bold uppercase tracking-[0.2em] mt-8">
+            © 2026 Safira TECNOLOGIA • TODOS OS DIREITOS RESERVADOS
+          </div>
+
+          {/* Decoração sutil */}
+          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-blue-500/5 rounded-full blur-[80px]"></div>
         </div>
 
-        {/* Instruções de demonstração */}
-        <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-          <p className="text-sm text-blue-800 font-medium mb-2">Contas de demonstração:</p>
-          <div className="text-xs text-blue-700 space-y-1">
-            <p>Admin: admin@sostickect.pt</p>
-            <p>Técnico: tecnico@sostickect.pt</p>
-            <p>Cliente: cliente@sostickect.pt</p>
-            <p className="mt-2 italic">Senha: qualquer valor</p>
+        {/* Lado Direito: Imagem/Visual com Sobreposição Gradual */}
+        <div className="hidden lg:block absolute inset-y-0 right-0 w-[70%] z-10">
+          <div className="absolute inset-0 z-20 bg-gradient-to-r from-white via-white/40 to-transparent"></div>
+          <img
+            src="https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&q=80&w=2070"
+            className="w-full h-full object-cover grayscale-[5%] brightness-95"
+            alt="Suporte Técnico"
+          />
+
+          <div className="absolute bottom-12 right-12 z-20">
+            <div className="p-6 bg-white/40 backdrop-blur-xl rounded-[32px] border border-white/60 max-w-xs shadow-xl animate-in slide-in-from-bottom-8 duration-700">
+              <p className="text-slate-800 text-xs font-bold leading-relaxed">
+                A melhor maneira de prever o futuro é criá-lo. Gestão eficiente de suporte técnico.
+              </p>
+              <div className="mt-4 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white shadow-lg">CL</div>
+                <span className="text-slate-500 text-[10px] font-black uppercase tracking-wider">Equipa Safira</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Marca d'água estilizada */}
+          <div className="absolute bottom-12 right-12 z-20">
+            <div className="flex flex-col items-end opacity-10">
+              <span className="text-slate-900 font-black text-5xl tracking-tighter leading-none">SOS</span>
+              <span className="text-slate-900 font-black text-5xl tracking-tighter leading-none">TKT</span>
+            </div>
           </div>
         </div>
       </div>

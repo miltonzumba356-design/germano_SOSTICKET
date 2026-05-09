@@ -32,11 +32,9 @@ function AppContent() {
     );
   }
 
-  // Se não estiver autenticado, mostra tela de login ou registro
+  // Se não estiver autenticado, mostra tela de login
   if (!isAuthenticated) {
-    return mostrandoRegistro 
-      ? <Register onBackToLogin={() => setMostrandoRegistro(false)} /> 
-      : <Login onGoToRegister={() => setMostrandoRegistro(true)} />;
+    return <Login onGoToRegister={() => {}} />;
   }
 
   // Função para renderizar o conteúdo da página atual
