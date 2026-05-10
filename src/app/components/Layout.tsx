@@ -81,7 +81,7 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
             >
               {menuAberto ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-            <h1 className="text-xl font-bold text-theme-primary">SOSTickect</h1>
+            <h1 className="text-xl font-bold text-theme-primary">SOSTicket</h1>
           </div>
           <div className="flex items-center gap-4">
             <button className="p-2 hover:bg-gray-100 rounded-lg relative">

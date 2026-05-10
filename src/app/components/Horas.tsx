@@ -31,7 +31,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useCronometro } from '../contexts/CronometroContext';
 import { 
-  horasTrabalhadasService, 
+  horasService, 
   intervencoesService, 
   relatoriosService 
 } from '../services/api';
@@ -44,6 +44,9 @@ export function Horas() {
   const [carregando, setCarregando] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [erro, setErro] = useState('');
+  
+  const isAdmin = usuario?.perfil === 'admin';
+  const isTecnico = usuario?.perfil === 'tecnico';
   
   // Estados para Registro
   const [intervencoes, setIntervencoes] = useState<Intervencao[]>([]);
@@ -79,14 +82,23 @@ export function Horas() {
     try {
       if (tab === 'cronometro') {
         const [intervs, resumo] = await Promise.all([
-          intervencoesService.listar({ tecnico: usuario?.id }),
-          horasTrabalhadasService.obterResumo()
+          intervencoesService.listar({ tecnico: isTecnico ? usuario?.id : undefined }),
+          relatoriosService.horas()
         ]);
+        
         const results = Array.isArray(intervs) ? intervs : (intervs as any)?.data || (intervs as any)?.results || [];
-        setIntervencoes(results);
+        
+        // Se não houver intervenções atribuídas, talvez queiramos mostrar as que estão "abertas"
+        if (results.length === 0 && isTecnico) {
+          const allOpen = await intervencoesService.listar({ status: 'aberto' });
+          const extraResults = Array.isArray(allOpen) ? allOpen : (allOpen as any)?.data || (allOpen as any)?.results || [];
+          setIntervencoes(extraResults);
+        } else {
+          setIntervencoes(results);
+        }
         setResumoTecnico(resumo);
       } else if (tab === 'minhas') {
-        const response = await horasTrabalhadasService.listar({
+        const response = await horasService.listar({
           page: pagina,
           limit: 10,
           search: busca,

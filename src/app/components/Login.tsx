@@ -35,7 +35,7 @@ export function Login() {
           {/* Logo Estilizada */}
           <div className="flex items-center gap-3">
             <div className="w-6 h-6 bg-blue-600 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.3)]"></div>
-            <span className="text-slate-900 font-bold tracking-tight text-lg">SOSTickect<span className="text-blue-600">.</span></span>
+            <span className="text-slate-900 font-bold tracking-tight text-lg">SOSTicket<span className="text-blue-600">.</span></span>
           </div>
 
           <div className="space-y-8 relative z-10">
@@ -54,7 +54,7 @@ export function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-slate-50 border-2 border-transparent text-slate-900 px-5 py-4 rounded-2xl focus:border-blue-500/30 focus:bg-white transition-all outline-none text-sm placeholder:text-slate-300 font-medium"
-                    placeholder="exemplo@sostickect.pt"
+                    placeholder="exemplo@sosticket.pt"
                     required
                   />
                   <Mail className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-blue-600 transition-colors" />

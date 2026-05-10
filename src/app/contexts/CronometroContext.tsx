@@ -66,6 +66,8 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
 
   // Atualizador de segundos em tempo real
   useEffect(() => {
+    if (cronometros.length === 0) return;
+
     const timer = setInterval(() => {
       setCronometros(prev => prev.map(c => {
         if (c.status === 'ativo') {
@@ -78,37 +80,47 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
             if (p.fim) {
               duracaoPausas += p.duracao;
             } else {
-              // Se houver uma pausa aberta, o timer não deveria estar 'ativo'
-              // mas por segurança calculamos até agora
               const pausaInicio = new Date(p.inicio).getTime();
               duracaoPausas += (agora - pausaInicio) / 1000;
             }
           });
 
           const decorrido = (agora - inicio) / 1000 - duracaoPausas;
-          return { ...c, tempoAtual: Math.max(0, Math.floor(decorrido)) };
+          const novoTempo = Math.max(0, Math.floor(decorrido));
+          
+          // Só atualiza se o tempo mudou para evitar renders idênticos
+          if (novoTempo === c.tempoAtual) return c;
+          return { ...c, tempoAtual: novoTempo };
         }
         return c;
       }));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [cronometros]);
+  }, [cronometros.length > 0]); // Só reinicia se a lista passar de vazia para populada
 
   // Sincronização periódica (30s)
   useEffect(() => {
+    if (cronometros.length === 0) return;
+
     const syncTimer = setInterval(() => {
-      cronometros.forEach(c => {
-        if (c.status === 'ativo' && c.tempoAtual) {
-          cronometroService.sincronizar(c.id, c.tempoAtual).catch(err => {
-            console.warn('Falha na sincronização do cronómetro:', err);
-          });
-        }
+      // Usamos uma referência interna ou o estado atualizado
+      // Para evitar depender de 'cronometros' no array de dependências, 
+      // podemos ler do estado atual no momento do tick.
+      setCronometros(atual => {
+        atual.forEach(c => {
+          if (c.status === 'ativo' && c.tempoAtual) {
+            cronometroService.sincronizar(c.id, c.tempoAtual).catch(err => {
+              console.warn('Falha na sincronização do cronómetro:', err);
+            });
+          }
+        });
+        return atual;
       });
     }, 30000);
 
     return () => clearInterval(syncTimer);
-  }, [cronometros]);
+  }, [cronometros.length > 0]);
 
   const iniciar = async (intervencaoId: string, tipo: 'presencial' | 'remoto') => {
     if (cronometros.length >= 3) {

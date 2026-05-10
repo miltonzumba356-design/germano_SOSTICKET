@@ -18,7 +18,8 @@ import {
   Star,
   Loader2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  X
 } from 'lucide-react';
 
 export function Tecnicos() {
@@ -35,7 +36,11 @@ export function Tecnicos() {
     email: '',
     password: '',
     telefone: '',
-    especialidades: ''
+    especialidades: '',
+    data_contratacao: '',
+    empresa: '',
+    endereco: '',
+    status: 'activo' as 'activo' | 'inactivo'
   });
 
   const carregarTecnicos = async () => {
@@ -45,7 +50,10 @@ export function Tecnicos() {
       const response = await tecnicosService.listar({ 
         search: busca || undefined 
       });
-      setTecnicos(Array.isArray(response) ? response : response?.data || response?.results || []);
+      const lista = Array.isArray(response) 
+        ? response 
+        : (response as any)?.results || (response as any)?.data || [];
+      setTecnicos(Array.isArray(lista) ? lista : []);
     } catch (error: any) {
       console.error('Erro ao carregar técnicos:', error);
       setErro('Não foi possível carregar a lista de técnicos.');
@@ -79,8 +87,7 @@ export function Tecnicos() {
     try {
       await tecnicosService.criar({
         ...formData,
-        especialidades: formData.especialidades.split(',').map(s => s.trim()).filter(s => s !== ''),
-        status: 'activo'
+        especialidades: formData.especialidades.trim()
       });
       
       setStatus('success');
@@ -91,7 +98,11 @@ export function Tecnicos() {
           email: '',
           password: '',
           telefone: '',
-          especialidades: ''
+          especialidades: '',
+          data_contratacao: '',
+          empresa: '',
+          endereco: '',
+          status: 'activo'
         });
         setStatus('idle');
         carregarTecnicos();
@@ -149,7 +160,7 @@ export function Tecnicos() {
              <User className="w-12 h-12 text-gray-200 mx-auto mb-2" />
              <p className="text-gray-500">Nenhum técnico encontrado.</p>
           </div>
-        ) : tecnicos.map((tecnico) => (
+        ) : tecnicos.filter(t => t && t.id).map((tecnico) => (
           <div key={tecnico.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg transition-all group overflow-hidden">
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
@@ -157,7 +168,7 @@ export function Tecnicos() {
                   <div className="w-16 h-16 bg-gradient-to-br from-indigo-100 to-blue-50 rounded-2xl flex items-center justify-center text-indigo-600">
                     <User className="w-8 h-8" />
                   </div>
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 border-4 border-white rounded-full flex items-center justify-center" title="Ativo">
+                  <div className={`absolute -bottom-1 -right-1 w-6 h-6 ${tecnico.status === 'activo' ? 'bg-emerald-500' : 'bg-red-500'} border-4 border-white rounded-full flex items-center justify-center`} title={tecnico.status === 'activo' ? 'Ativo' : 'Inativo'}>
                     <CheckCircle className="w-3 h-3 text-white" />
                   </div>
                 </div>
@@ -172,22 +183,29 @@ export function Tecnicos() {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {(tecnico.especialidades || ['Suporte Geral', 'TI']).map((esp: string, i: number) => (
-                    <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-md">
-                      {esp.toUpperCase()}
-                    </span>
-                  ))}
+                  {(Array.isArray(tecnico.especialidades) ? tecnico.especialidades : []).length > 0 
+                    ? (tecnico.especialidades as string[]).map((esp, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-md">
+                          {String(esp).toUpperCase()}
+                        </span>
+                      ))
+                    : (['Suporte Geral', 'TI']).map((esp, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-md">
+                          {esp.toUpperCase()}
+                        </span>
+                      ))
+                  }
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50">
                 <div className="text-center">
                   <p className="text-xs text-gray-400 font-medium mb-1">Intervenções</p>
-                  <p className="text-sm font-bold text-gray-900">{tecnico.total_intervencoes || 0}</p>
+                  <span className="font-bold text-gray-900">{tecnico.intervencoes_ativas || 0}</span>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400 font-medium mb-1">Horas/Mês</p>
-                  <p className="text-sm font-bold text-gray-900">{tecnico.horas_mes || 0}h</p>
+                  <span className="font-bold text-gray-900">{tecnico.total_horas_mes || 0}h</span>
                 </div>
               </div>
             </div>
@@ -265,7 +283,7 @@ export function Tecnicos() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-bold text-gray-700">Especialidades (separadas por vírgula)</label>
+                  <label className="text-sm font-bold text-gray-700">Especialidades</label>
                   <input 
                     type="text" 
                     name="especialidades"
@@ -274,6 +292,50 @@ export function Tecnicos() {
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
                     placeholder="Redes, Hardware, Windows Server..." 
                   />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-bold text-gray-700">Empresa</label>
+                  <input 
+                    type="text" 
+                    name="empresa"
+                    value={formData.empresa}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
+                    placeholder="Safira" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-bold text-gray-700">Endereço</label>
+                  <input 
+                    type="text" 
+                    name="endereco"
+                    value={formData.endereco}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
+                    placeholder="Angola" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-bold text-gray-700">Data de Contratação</label>
+                  <input 
+                    type="date" 
+                    name="data_contratacao"
+                    value={formData.data_contratacao}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-bold text-gray-700">Status</label>
+                  <select
+                    name="status"
+                    value={formData.status}
+                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as 'activo' | 'inactivo' }))}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  >
+                    <option value="activo">Activo</option>
+                    <option value="inactivo">Inactivo</option>
+                  </select>
                 </div>
               </div>
               <div className="p-6 border-t border-gray-100 flex justify-end gap-4 bg-gray-50/50 rounded-b-2xl">
@@ -319,7 +381,3 @@ export function Tecnicos() {
     </div>
   );
 }
-
-// Substituto temporário para o ícone X que não estava no import mas é necessário para o modal
-import { X } from 'lucide-react';
-

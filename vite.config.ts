@@ -1,7 +1,11 @@
 import { defineConfig } from 'vite'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 
 function figmaAssetResolver() {
@@ -20,7 +24,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://suport-api.onrender.com',
+        target: 'https://suport-api-1.onrender.com',
         changeOrigin: true,
         secure: false,
       }

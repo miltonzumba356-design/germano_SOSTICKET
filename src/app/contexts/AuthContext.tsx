@@ -74,19 +74,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const response = await authService.login(email, password);
+      
+      // Extrai o token da resposta
+      const tokenRecebido = response.access_token || response.access || response.token || (response.data?.access_token);
+      setToken(tokenRecebido);
 
-      setToken(response.access_token);
+      // Tenta extrair o usuário da resposta
+      let dadosUsuario = response.usuario || response.user || response.profile || response.data?.usuario;
 
-      // A resposta do login já contém os dados do usuário
-      if (response.usuario) {
+      // Se não houver dados do usuário na resposta do login, busca o perfil explicitamente
+      if (!dadosUsuario) {
+        try {
+          dadosUsuario = await authService.getProfile();
+        } catch (perfilError) {
+          console.error('Login bem sucedido mas falha ao obter perfil:', perfilError);
+        }
+      }
+
+      if (dadosUsuario) {
         setUsuario({
-          id: response.usuario.id,
-          nome: response.usuario.nome,
-          email: response.usuario.email,
-          perfil: response.usuario.perfil,
-          telefone: response.usuario.telefone,
-          avatar_url: response.usuario.avatar_url,
+          id: dadosUsuario.id,
+          nome: dadosUsuario.nome || dadosUsuario.first_name || dadosUsuario.username || 'Utilizador',
+          email: dadosUsuario.email,
+          perfil: dadosUsuario.perfil || dadosUsuario.role || 'cliente',
+          telefone: dadosUsuario.telefone,
+          avatar_url: dadosUsuario.avatar_url,
         });
+      } else {
+        // Fallback caso realmente não consiga nada, mas tenha token
+        // Isso evita ficar preso na tela de login se o token for válido
+        setUsuario({
+          id: 'temp-id',
+          nome: email.split('@')[0],
+          email: email,
+          perfil: 'cliente',
+        } as Usuario);
       }
     } catch (error) {
       console.error('Erro no login:', error);

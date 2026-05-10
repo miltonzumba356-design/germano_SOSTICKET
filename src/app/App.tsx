@@ -34,7 +34,7 @@ function AppContent() {
 
   // Se não estiver autenticado, mostra tela de login
   if (!isAuthenticated) {
-    return <Login onGoToRegister={() => {}} />;
+    return <Login />;
   }
 
   // Função para renderizar o conteúdo da página atual

@@ -44,8 +44,8 @@ export function Relatorios() {
   const carregarDadosHoras = async () => {
     setCarregando(true);
     try {
-      const response = await relatoriosService.relatorioHoras();
-      setDadosHoras(response);
+      const response = await relatoriosService.horas();
+      setDadosHoras(response?.data || response || []);
     } catch (err) {
       console.error('Erro ao carregar relatório de horas:', err);
     } finally {
@@ -56,8 +56,8 @@ export function Relatorios() {
   const carregarDadosIntervencoes = async () => {
     setCarregando(true);
     try {
-      const response = await relatoriosService.relatorioIntervencoes();
-      setDadosIntervencoes(response);
+      const response = await relatoriosService.intervencoes();
+      setDadosIntervencoes(response?.data || response || []);
     } catch (err) {
       console.error('Erro ao carregar relatório de intervenções:', err);
     } finally {

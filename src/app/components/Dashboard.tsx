@@ -130,36 +130,47 @@ export function Dashboard() {
     setErro('');
 
     try {
+      // Carregar dados em paralelo, mas tratar erros individualmente
       const [respIntervencoes, respDashboard, respContratos] = await Promise.all([
         intervencoesService.listar({
           limit: 5,
           ...(isTecnico ? { tecnico: usuario?.id } : {}),
           ...(isCliente ? { cliente: usuario?.id } : {})
+        }).catch(err => {
+          console.error('Erro ao carregar intervenções:', err);
+          return [];
         }),
-        isAdmin
+        (isAdmin
           ? relatoriosService.dashboardAdmin()
           : isTecnico
             ? relatoriosService.dashboardTecnico()
             : isCliente
               ? relatoriosService.dashboardCliente()
-              : Promise.resolve(null),
-        isAdmin || isCliente
+              : Promise.resolve(null)).catch(err => {
+          console.error('Erro ao carregar dados do dashboard:', err);
+          return null;
+        }),
+        (isAdmin || isCliente
           ? contratosService.listar({
             limit: 5,
-            status: 'activo',
+            status: 'ativo',
             ...(isCliente ? { cliente: usuario?.id } : {})
           })
-          : Promise.resolve(null)
+          : Promise.resolve(null)).catch(err => {
+          console.error('Erro ao carregar contratos:', err);
+          return null;
+        })
       ]);
 
-      setIntervencoes(Array.isArray(respIntervencoes) ? respIntervencoes : respIntervencoes?.data || respIntervencoes?.results || []);
-      setDadosDashboard({
-        ...respDashboard,
-        total_contratos_ativos: respDashboard?.total_contratos_ativos ?? (respContratos as any)?.pagination?.total ?? 0
-      });
+      // Extração simplificada de dados
+      const intervencoesData = Array.isArray(respIntervencoes) ? respIntervencoes : (respIntervencoes as any)?.results || (respIntervencoes as any)?.data || [];
+      setIntervencoes(intervencoesData);
+      
+      const dashData = respDashboard?.data || respDashboard || {};
+      setDadosDashboard(dashData);
 
       if (respContratos) {
-        const contractsData = Array.isArray(respContratos) ? respContratos : (respContratos as any)?.data || (respContratos as any)?.results || [];
+        const contractsData = Array.isArray(respContratos) ? respContratos : (respContratos as any)?.results || (respContratos as any)?.data || [];
         const expira = contractsData.filter((c: any) => {
           if (!c.data_fim) return false;
           const dataFim = new Date(c.data_fim);
@@ -181,14 +192,21 @@ export function Dashboard() {
     carregarDados();
   }, [usuario?.perfil]);
 
+  const tituloDashboard = isAdmin ? 'Dashboard Administrativo' : isTecnico ? 'Dashboard do Técnico' : 'Painel do Cliente';
+  const subtituloDashboard = isAdmin 
+    ? 'Visão geral do sistema e métricas de desempenho.' 
+    : isTecnico 
+      ? 'Acompanhe as suas intervenções e produtividade.' 
+      : 'Estado dos seus contratos e pedidos de suporte.';
+
   return (
     <div className="space-y-8 pb-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-            Dashboard Administrativo
+            {tituloDashboard}
           </h2>
-          <p className="text-gray-500 mt-1">Visão geral do sistema e métricas de desempenho.</p>
+          <p className="text-gray-500 mt-1">{subtituloDashboard}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="bg-white border border-gray-200 rounded-lg px-4 py-2 flex items-center gap-2 text-sm text-gray-600 shadow-sm">
@@ -217,7 +235,7 @@ export function Dashboard() {
           <>
             <StatCard
               titulo="Total de Clientes"
-              valor={dadosDashboard?.total_clientes ?? 0}
+              valor={dadosDashboard?.total_clientes ?? dadosDashboard?.clientes_total ?? dadosDashboard?.clientes ?? 0}
               icon={Users}
               cor="bg-blue-600"
               tendencia={{ valor: '0%', tipo: 'up' }}
@@ -225,7 +243,7 @@ export function Dashboard() {
             />
             <StatCard
               titulo="Contratos Ativos"
-              valor={dadosDashboard?.total_contratos_ativos ?? 0}
+              valor={dadosDashboard?.total_contratos_ativos ?? dadosDashboard?.contratos_ativos ?? dadosDashboard?.contratos ?? 0}
               icon={FileText}
               cor="bg-emerald-600"
               tendencia={{ valor: '0%', tipo: 'up' }}
@@ -233,7 +251,7 @@ export function Dashboard() {
             />
             <StatCard
               titulo="Intervenções Abertas"
-              valor={dadosDashboard?.intervencoes_abertas ?? 0}
+              valor={dadosDashboard?.intervencoes_abertas ?? dadosDashboard?.tickets_abertos ?? dadosDashboard?.total_intervencoes ?? 0}
               icon={Ticket}
               cor="bg-amber-600"
               tendencia={{ valor: '0', tipo: 'up' }}
@@ -241,7 +259,7 @@ export function Dashboard() {
             />
             <StatCard
               titulo="Receita Total"
-              valor={dadosDashboard?.receita_total !== undefined ? `${dadosDashboard.receita_total.toLocaleString()} Kz` : "0 Kz"}
+              valor={dadosDashboard?.receita_total !== undefined ? `${dadosDashboard.receita_total.toLocaleString()} Kz` : dadosDashboard?.total_receita !== undefined ? `${dadosDashboard.total_receita.toLocaleString()} Kz` : "0 Kz"}
               icon={DollarSign}
               cor="bg-indigo-600"
               tendencia={{ valor: '0%', tipo: 'up' }}
@@ -488,7 +506,7 @@ export function Dashboard() {
                 <tbody className="divide-y divide-gray-50">
                   {contratosExpira.length > 0 ? contratosExpira.map(contrato => (
                     <tr key={contrato.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4 text-sm font-bold text-gray-900">#{contrato.numero}</td>
+                      <td className="px-6 py-4 text-sm font-bold text-gray-900">#{contrato.id.substring(0, 8)}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{contrato.cliente_nome}</td>
                       <td className="px-6 py-4 text-sm font-bold text-red-600">{new Date(contrato.data_fim).toLocaleDateString('pt-PT')}</td>
                       <td className="px-6 py-4">

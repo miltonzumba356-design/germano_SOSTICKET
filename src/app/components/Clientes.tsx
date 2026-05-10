@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Cliente } from '../types/api';
+import { Cliente, ClienteRequest } from '../types/api';
 import { clientesService } from '../services/api';
 import { 
   Search, 
@@ -69,9 +69,9 @@ export function Clientes() {
         [`posto ${i + 1}`]: { Id: p.id, Nome: p.nome }
       }), {});
 
-      const payload = {
+      const payload: ClienteRequest = {
         ...formData,
-        perfil: 'cliente',
+        perfil: 'cliente' as any,
         postos: postosFormatados,
         status: 'activo'
       };
@@ -119,8 +119,11 @@ export function Clientes() {
         page: pagina,
         limit: 10
       });
-      setClientes(Array.isArray(response) ? response : response?.data || response?.results || []);
-      setTotalPaginas(response?.pagination?.total_pages || (response as any)?.total_pages || 1);
+      const lista = Array.isArray(response) 
+        ? response 
+        : (response as any)?.results || (response as any)?.data || [];
+      setClientes(Array.isArray(lista) ? lista : []);
+      setTotalPaginas((response as any)?.pagination?.total_pages || (response as any)?.total_pages || 1);
     } catch (error: any) {
       console.error('Erro ao carregar clientes:', error);
       setErro('Falha ao carregar a lista de clientes.');
@@ -209,7 +212,7 @@ export function Clientes() {
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-gray-500">Nenhum cliente encontrado.</td>
                 </tr>
-              ) : clientes.map((cliente) => (
+              ) : clientes.filter(c => c && c.id).map((cliente) => (
                 <tr key={cliente.id} className="hover:bg-gray-50/30 transition-colors group">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -241,12 +244,12 @@ export function Clientes() {
                     <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${
                       cliente.status === 'activo' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
                     }`}>
-                      {cliente.status?.toUpperCase() || 'ACTIVO'}
+                      {cliente.status === 'activo' ? 'Ativo' : 'Inativo'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900">{cliente.total_contratos || 0}</span>
+                      <span className="font-bold text-gray-900">{cliente.contratos_ativos || 0}</span>
                       <span className="text-xs text-gray-400">Ativos</span>
                     </div>
                   </td>
@@ -392,6 +395,7 @@ export function Clientes() {
                     placeholder="192.168.1.100" 
                   />
                 </div>
+
                 {/* Configuração Dinâmica de Postos */}
                 <div className="md:col-span-2 space-y-4">
                   <div className="flex items-center justify-between">
@@ -580,21 +584,27 @@ export function Clientes() {
                   </h4>
                   <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                     {clienteSelecionado.postos && typeof clienteSelecionado.postos === 'object' ? (
-                      Object.entries(clienteSelecionado.postos).map(([key, value]: [string, any], index) => (
-                        <div key={index} className="p-4 bg-white border border-gray-100 rounded-2xl shadow-sm hover:border-indigo-200 transition-all group">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{key}</span>
-                            <Cpu className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-400" />
+                      Object.entries(clienteSelecionado.postos).map(([key, value]: [string, any], index) => {
+                        const isObject = value && typeof value === 'object';
+                        const id = isObject ? (value.id || value.Id || index) : value;
+                        const nome = isObject ? (value.nome || value.Nome || value.localização || key) : key;
+
+                        return (
+                          <div key={index} className="p-4 bg-white border border-gray-100 rounded-2xl shadow-sm hover:border-indigo-200 transition-all group">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{key}</span>
+                              <Cpu className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-400" />
+                            </div>
+                            <p className="text-sm font-bold text-gray-900">{nome}</p>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-[10px] font-bold text-gray-400 uppercase">Identificador:</span>
+                              <span className="text-[10px] font-black text-gray-700 font-mono bg-gray-50 px-1.5 py-0.5 rounded">{id}</span>
+                            </div>
                           </div>
-                          <p className="text-sm font-bold text-gray-900">{value.Nome}</p>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase">ID:</span>
-                            <span className="text-[10px] font-black text-gray-700 font-mono bg-gray-50 px-1.5 py-0.5 rounded">{value.Id}</span>
-                          </div>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
-                      <div className="py-12 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                      <div className="py-12 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200 w-full">
                         <Monitor className="w-8 h-8 text-gray-200 mx-auto mb-2" />
                         <p className="text-xs text-gray-400 font-bold uppercase">Nenhum posto configurado</p>
                       </div>

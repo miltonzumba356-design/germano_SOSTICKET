@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Intervencao } from '../types/api';
-import { intervencoesService, contratosService } from '../services/api';
+import { intervencoesService, contratosService, clientesService, tecnicosService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   Search, 
@@ -20,7 +20,6 @@ import {
   Info,
   X,
   Camera,
-  Upload,
   ArrowRight,
   ShieldCheck,
   FileText
@@ -42,17 +41,24 @@ export function Intervencoes() {
   const [exibirModalNovo, setExibirModalNovo] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [contratos, setContratos] = useState<any[]>([]);
+  const [clientes, setClientes] = useState<any[]>([]);
+  const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [novoTicket, setNovoTicket] = useState({
     titulo: '',
     descricao: '',
+    cliente_id: '',
     contrato_id: '',
     prioridade: 'media' as any,
-    anexos: [] as string[]
+    anexos: [] as File[]
   });
   const [exibirModalDetalhes, setExibirModalDetalhes] = useState(false);
   const [intervencaoDetalhe, setIntervencaoDetalhe] = useState<Intervencao | null>(null);
   const [novoComentario, setNovoComentario] = useState('');
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
+  const [exibirModalAtribuir, setExibirModalAtribuir] = useState(false);
+  const [intervencaoAtribuir, setIntervencaoAtribuir] = useState<Intervencao | null>(null);
+  const [tecnicoSelecionado, setTecnicoSelecionado] = useState('');
+  const [atribuindo, setAtribuindo] = useState(false);
 
   const carregarIntervencoes = async () => {
     setCarregando(true);
@@ -69,14 +75,17 @@ export function Intervencoes() {
         cliente: isCliente ? usuario?.id : undefined
       });
       
-      const results = Array.isArray(response) ? response : (response as any)?.data || (response as any)?.results || [];
-      setIntervencoes(results);
+      const lista = Array.isArray(response) 
+        ? response 
+        : response?.data?.results || response?.results || response?.data || [];
+      setIntervencoes(Array.isArray(lista) ? lista : []);
       
-      if ((response as any)?.pagination) {
-        setTotalPaginas((response as any).pagination.total_pages || 1);
-      } else if ((response as any)?.count) {
-        setTotalPaginas(Math.ceil((response as any).count / 10));
-      }
+      setTotalPaginas(
+        response?.pagination?.total_pages || 
+        response?.total_pages || 
+        response?.data?.total_pages || 
+        (response?.count ? Math.ceil(response.count / 10) : 1)
+      );
     } catch (err: any) {
       console.error('Erro ao carregar intervenções:', err);
       setErro('Não foi possível carregar as intervenções.');
@@ -88,16 +97,54 @@ export function Intervencoes() {
   const carregarContratos = async () => {
     if (!isCliente && !isAdmin) return;
     try {
-      const resp = await contratosService.listar({ status: 'activo', limit: 50 });
-      setContratos(Array.isArray(resp) ? resp : resp?.data || resp?.results || []);
+      const clienteFiltro = isAdmin ? novoTicket.cliente_id || undefined : usuario?.id;
+      const resp = await contratosService.listar({ 
+        status: 'activo', 
+        limit: 50,
+        cliente: clienteFiltro
+      });
+      const lista = Array.isArray(resp) 
+        ? resp 
+        : resp?.data?.results || resp?.results || resp?.data || [];
+      setContratos(Array.isArray(lista) ? lista : []);
     } catch (err) {
       console.error('Erro ao carregar contratos:', err);
+    }
+  };
+
+  const carregarClientes = async () => {
+    if (!isAdmin) return;
+    try {
+      const resp = await clientesService.listar({ limit: 100, status: 'activo' });
+      const lista = Array.isArray(resp)
+        ? resp
+        : resp?.data?.results || resp?.results || resp?.data || [];
+      setClientes(Array.isArray(lista) ? lista : []);
+    } catch (err) {
+      console.error('Erro ao carregar clientes:', err);
+      setClientes([]);
+    }
+  };
+
+  const carregarTecnicos = async () => {
+    if (!isAdmin) return;
+    try {
+      const resp = await tecnicosService.listar({ limit: 100, status: 'activo' });
+      const lista = Array.isArray(resp)
+        ? resp
+        : resp?.data?.results || resp?.results || resp?.data || [];
+      setTecnicos(Array.isArray(lista) ? lista : []);
+    } catch (err) {
+      console.error('Erro ao carregar técnicos:', err);
+      setTecnicos([]);
     }
   };
 
   useEffect(() => {
     carregarIntervencoes();
     if (isCliente || isAdmin) carregarContratos();
+    if (isAdmin) carregarClientes();
+    if (isAdmin) carregarTecnicos();
   }, [pagina, filtroStatus, filtroPrioridade]);
 
   useEffect(() => {
@@ -107,6 +154,62 @@ export function Intervencoes() {
     }, 500);
     return () => clearTimeout(timer);
   }, [busca]);
+
+  useEffect(() => {
+    if (isAdmin && exibirModalNovo) {
+      carregarClientes();
+      carregarTecnicos();
+    }
+  }, [isAdmin, exibirModalNovo]);
+  
+  // Auto-selecionar contrato se houver apenas um para o cliente
+  useEffect(() => {
+    if (isCliente && contratos.length === 1 && !novoTicket.contrato_id) {
+      setNovoTicket(prev => ({ ...prev, contrato_id: contratos[0].id }));
+    }
+  }, [contratos, isCliente]);
+
+  useEffect(() => {
+    if (isAdmin && novoTicket.cliente_id) {
+      carregarContratos();
+    }
+  }, [novoTicket.cliente_id, isAdmin]);
+
+  const abrirModalAtribuir = (intervencao: Intervencao) => {
+    setIntervencaoAtribuir(intervencao);
+    setTecnicoSelecionado(intervencao.tecnico_id || '');
+    setExibirModalAtribuir(true);
+    if (tecnicos.length === 0) {
+      carregarTecnicos();
+    }
+  };
+
+  const handleAtribuirTecnico = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!intervencaoAtribuir || !tecnicoSelecionado) {
+      setErro('Selecione um técnico.');
+      return;
+    }
+
+    setAtribuindo(true);
+    setErro('');
+    try {
+      await intervencoesService.atribuirTecnico(intervencaoAtribuir.id, tecnicoSelecionado);
+      setExibirModalAtribuir(false);
+      setIntervencaoAtribuir(null);
+      setTecnicoSelecionado('');
+      await carregarIntervencoes();
+      if (exibirModalDetalhes && intervencaoDetalhe?.id === intervencaoAtribuir.id) {
+        const atualizada = await intervencoesService.obterPorId(intervencaoAtribuir.id);
+        setIntervencaoDetalhe(atualizada);
+      }
+    } catch (err: any) {
+      console.error('Erro ao atribuir técnico:', err);
+      setErro(err.message || 'Falha ao atribuir técnico.');
+    } finally {
+      setAtribuindo(false);
+    }
+  };
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -129,10 +232,23 @@ export function Intervencoes() {
     }
   };
 
+  const formatTecnicoLabel = (tecnico: any) => {
+    const nome = tecnico?.nome || 'Técnico';
+    const especialidades = Array.isArray(tecnico?.especialidades)
+      ? tecnico.especialidades.filter(Boolean)
+      : [];
+
+    return especialidades.length > 0
+      ? `${nome} — ${especialidades.join(', ')}`
+      : nome;
+  };
+
   const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!novoTicket.contrato_id) {
-      setErro('Selecione um contrato para vincular a intervenção.');
+    const clienteSelecionado = isAdmin ? novoTicket.cliente_id : usuario?.id;
+
+    if (!clienteSelecionado) {
+      setErro('Selecione um cliente para vincular a intervenção.');
       return;
     }
     
@@ -140,24 +256,29 @@ export function Intervencoes() {
     setStatus('loading');
     setErro('');
     try {
-      // Encontrar o cliente_id do contrato selecionado
-      const contratoSelecionado = contratos.find(c => c.id === novoTicket.contrato_id);
-      const clienteIdFinal = isCliente ? usuario?.id : contratoSelecionado?.cliente_id;
+      // Se houver contrato selecionado, usamos o vínculo para reforçar a consistência.
+      const contratoSelecionado = novoTicket.contrato_id
+        ? contratos.find(c => c.id === novoTicket.contrato_id)
+        : null;
+      const clienteIdFinal = clienteSelecionado || contratoSelecionado?.cliente_id;
 
       if (!clienteIdFinal) {
         throw new Error('Não foi possível identificar o cliente do contrato.');
       }
 
       await intervencoesService.criar({
-        ...novoTicket,
+        titulo: novoTicket.titulo.trim(),
+        descricao: novoTicket.descricao.trim(),
         cliente_id: clienteIdFinal,
-        anexos: [] // Adicionado conforme nova documentação
+        contrato_id: novoTicket.contrato_id || undefined,
+        prioridade: novoTicket.prioridade,
+        anexos: novoTicket.anexos
       });
       
       setStatus('success');
       setTimeout(() => {
         setExibirModalNovo(false);
-        setNovoTicket({ titulo: '', descricao: '', contrato_id: '', prioridade: 'media', anexos: [] });
+        setNovoTicket({ titulo: '', descricao: '', cliente_id: '', contrato_id: '', prioridade: 'media', anexos: [] });
         setStatus('idle');
         carregarIntervencoes();
       }, 1500);
@@ -264,23 +385,52 @@ export function Intervencoes() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Contrato Relacionado *</label>
-                  <select 
-                    required
-                    value={novoTicket.contrato_id}
-                    onChange={(e) => setNovoTicket({...novoTicket, contrato_id: e.target.value})}
-                    className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
-                  >
-                    <option value="">Selecione...</option>
-                    {contratos.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.cliente_nome.toUpperCase()} — {(c.tipo_contrato || 'Contrato').toUpperCase()} (#{c.numero || c.id.substring(0, 4).toUpperCase()})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {isAdmin && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cliente *</label>
+                    <select
+                      required
+                      value={novoTicket.cliente_id}
+                      onChange={(e) => setNovoTicket(prev => ({
+                        ...prev,
+                        cliente_id: e.target.value,
+                        contrato_id: ''
+                      }))}
+                      className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                    >
+                      <option value="">Selecione...</option>
+                      {clientes.map((cliente) => (
+                        <option key={cliente.id} value={cliente.id}>
+                          {cliente.nome} {cliente.empresa ? `— ${cliente.empresa}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {!(isCliente && contratos.length === 1) && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Contrato Relacionado</label>
+                    <select 
+                      value={novoTicket.contrato_id}
+                      onChange={(e) => setNovoTicket({...novoTicket, contrato_id: e.target.value})}
+                      className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                    >
+                      <option value="">Selecione...</option>
+                      {contratos
+                        .filter(c => !isAdmin || !novoTicket.cliente_id || c.cliente_id === novoTicket.cliente_id)
+                        .map(c => (
+                        <option key={c.id} value={c.id}>
+                          {isCliente 
+                            ? `${(c.tipo_contrato || c.tipo_de_pagamento || 'Contrato').toUpperCase()} (#${c.numero || c.id.substring(0, 4).toUpperCase()})`
+                            : `${c.cliente_nome?.toUpperCase() || 'CLIENTE'} — ${(c.tipo_contrato || 'Contrato').toUpperCase()} (#${c.numero || c.id.substring(0, 4).toUpperCase()})`
+                          }
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Prioridade Sugerida</label>
                   <select 
@@ -296,71 +446,45 @@ export function Intervencoes() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anexos / Fotos do Problema</label>
-                <div className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <input 
-                      type="file"
-                      id="input-file-anexo"
-                      className="hidden"
-                      accept="image/*,application/pdf"
-                      multiple
-                      onChange={(e) => {
-                        const files = e.target.files;
-                        if (files) {
-                          Array.from(files).forEach(file => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              const base64String = reader.result as string;
-                              setNovoTicket(prev => ({
-                                ...prev, 
-                                anexos: [...prev.anexos, base64String]
-                              }));
-                            };
-                            reader.readAsDataURL(file);
-                          });
-                        }
-                      }}
-                    />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anexos / Fotos do Problema</label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <input 
+                        type="file"
+                        id="input-file-anexo"
+                        className="hidden"
+                        accept="image/*,application/pdf"
+                        multiple
+                        onChange={(e) => {
+                          const files = e.target.files;
+                          if (files) {
+                            setNovoTicket(prev => ({
+                              ...prev,
+                              anexos: [...prev.anexos, ...Array.from(files)]
+                            }));
+                          }
+                        }}
+                      />
                     <button 
                       type="button"
                       onClick={() => document.getElementById('input-file-anexo')?.click()}
                       className="w-full flex items-center justify-center gap-3 px-4 py-4 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl hover:border-theme-primary hover:bg-theme-primary-light transition-all group"
-                    >
-                      <Camera className="w-6 h-6 text-gray-400 group-hover:text-theme-primary" />
-                      <span className="text-sm font-bold text-gray-500 group-hover:text-theme-primary">Tirar Foto ou Escolher Arquivo</span>
-                    </button>
+                      >
+                        <Camera className="w-6 h-6 text-gray-400 group-hover:text-theme-primary" />
+                        <span className="text-sm font-bold text-gray-500 group-hover:text-theme-primary">Tirar Foto ou Escolher Arquivo</span>
+                      </button>
+                    </div>
                   </div>
-                  
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      const url = prompt('Cole o link do anexo aqui:');
-                      if (url) {
-                        setNovoTicket({...novoTicket, anexos: [...novoTicket.anexos, url]});
-                      }
-                    }}
-                    className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-100 transition-colors"
-                    title="Adicionar por Link"
-                  >
-                    <Upload className="w-6 h-6" />
-                  </button>
-                </div>
 
                 {novoTicket.anexos.length > 0 && (
                   <div className="flex flex-wrap gap-3 mt-4">
                     {novoTicket.anexos.map((anexo, i) => (
                       <div key={i} className="relative group">
-                        {anexo.startsWith('data:image') ? (
-                          <div className="w-20 h-20 rounded-xl overflow-hidden border-2 border-indigo-100 shadow-sm">
-                            <img src={anexo} alt="Preview" className="w-full h-full object-cover" />
-                          </div>
-                        ) : (
-                          <div className="w-20 h-20 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 border-2 border-indigo-100">
-                            <Paperclip className="w-8 h-8" />
-                          </div>
-                        )}
+                        <div className="w-24 h-24 bg-indigo-50 rounded-xl flex flex-col items-center justify-center text-indigo-600 border-2 border-indigo-100 px-2 text-center">
+                          <Paperclip className="w-8 h-8" />
+                          <span className="mt-1 text-[10px] font-bold text-gray-600 leading-tight truncate w-full">{anexo.name}</span>
+                        </div>
                         <button 
                           type="button"
                           onClick={() => setNovoTicket({...novoTicket, anexos: novoTicket.anexos.filter((_, idx) => idx !== i)})}
@@ -529,6 +653,18 @@ export function Intervencoes() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                   {isAdmin && (
+                     <button
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         abrirModalAtribuir(intervencao);
+                       }}
+                       className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                       title="Atribuir técnico"
+                     >
+                       <ShieldCheck className="w-4 h-4" />
+                     </button>
+                   )}
                    {usuario?.perfil === 'tecnico' && (
                      <>
                        <button className="px-4 py-2 text-xs font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors">
@@ -736,6 +872,68 @@ export function Intervencoes() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {exibirModalAtribuir && intervencaoAtribuir && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-theme-primary text-white">
+              <div>
+                <h3 className="text-xl font-black">Atribuir Técnico</h3>
+                <p className="text-xs font-bold text-white/80 uppercase tracking-widest">#{intervencaoAtribuir.numero || intervencaoAtribuir.id.substring(0, 8)}</p>
+              </div>
+              <button onClick={() => setExibirModalAtribuir(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAtribuirTecnico} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Técnico *</label>
+                <select
+                  required
+                  value={tecnicoSelecionado}
+                  onChange={(e) => setTecnicoSelecionado(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                >
+                  <option value="">Selecione...</option>
+                  {tecnicos.map((tecnico) => (
+                    <option key={tecnico?.id || tecnico?.email || tecnico?.nome} value={tecnico?.id}>
+                      {formatTecnicoLabel(tecnico)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setExibirModalAtribuir(false)}
+                  className="flex-1 py-3 text-sm font-black text-gray-500 uppercase tracking-widest hover:bg-gray-100 rounded-2xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={atribuindo}
+                  className="flex-[2] py-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 bg-theme-primary text-white shadow-indigo-100 hover:bg-theme-primary-hover disabled:opacity-50"
+                >
+                  {atribuindo ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Atribuindo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-5 h-5" />
+                      <span>Atribuir</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

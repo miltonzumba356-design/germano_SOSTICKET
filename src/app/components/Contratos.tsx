@@ -40,14 +40,13 @@ export function Contratos() {
   // Estado do formulário de novo contrato
   const [formData, setFormData] = useState({
     cliente_id: '',
-    tipo_contrato: 'assistencia tecnica',
-    tipo_de_pagamento: 'horas',
+    tipo: 'horas' as 'horas' | 'mensal' | 'anual',
     horas_contratadas: '0',
     horas_utilizadas: '0',
     valor_total: '0',
     data_inicio: new Date().toISOString().split('T')[0],
     data_fim: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
-    status: 'activo' as 'activo' | 'expirado' | 'cancelado',
+    status: 'activo' as any,
     observacoes: ''
   });
 
@@ -62,8 +61,11 @@ export function Contratos() {
         page: pagina,
         limit: 10
       });
-      setContratos(Array.isArray(response) ? response : response?.data || response?.results || []);
-      setTotalPaginas(response?.pagination?.total_pages || (response as any)?.total_pages || 1);
+      const lista = Array.isArray(response) 
+        ? response 
+        : (response as any)?.results || (response as any)?.data || [];
+      setContratos(Array.isArray(lista) ? lista : []);
+      setTotalPaginas((response as any)?.pagination?.total_pages || (response as any)?.total_pages || 1);
     } catch (error: any) {
       console.error('Erro ao carregar contratos:', error);
       setErro('Não foi possível carregar os contratos.');
@@ -75,7 +77,10 @@ export function Contratos() {
   const carregarClientes = async () => {
     try {
       const response = await clientesService.listar({ limit: 100 });
-      setClientes(Array.isArray(response) ? response : response?.data || response?.results || []);
+      const lista = Array.isArray(response) 
+        ? response 
+        : (response as any)?.results || (response as any)?.data || [];
+      setClientes(Array.isArray(lista) ? lista : []);
     } catch (err) {
       console.error('Erro ao carregar clientes para o contrato:', err);
     }
@@ -129,10 +134,16 @@ export function Contratos() {
 
     try {
       await contratosService.criar({
-        ...formData,
+        cliente_id: formData.cliente_id,
+        tipo_contrato: 'suporte', // Valor padrão ou vindo do form
+        tipo_de_pagamento: formData.tipo as any,
         horas_contratadas: String(formData.horas_contratadas),
         horas_utilizadas: String(formData.horas_utilizadas),
-        valor_total: String(formData.valor_total)
+        valor_total: String(formData.valor_total),
+        data_inicio: formData.data_inicio,
+        data_fim: formData.data_fim,
+        status: formData.status as any,
+        observacoes: formData.observacoes
       });
       
       setStatus('success');
@@ -140,14 +151,13 @@ export function Contratos() {
         setExibirModal(false);
         setFormData({
           cliente_id: '',
-          tipo_contrato: 'assistencia tecnica',
-          tipo_de_pagamento: 'horas',
+          tipo: 'horas',
           horas_contratadas: '0',
           horas_utilizadas: '0',
           valor_total: '0',
           data_inicio: new Date().toISOString().split('T')[0],
           data_fim: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
-          status: 'activo',
+          status: 'ativo',
           observacoes: ''
         });
         setStatus('idle');
@@ -200,7 +210,7 @@ export function Contratos() {
             className="flex-1 md:flex-none bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-theme-primary text-gray-600"
           >
             <option value="">Todos Status</option>
-            <option value="activo">Ativos</option>
+            <option value="ativo">Ativos</option>
             <option value="expirado">Expirados</option>
             <option value="cancelado">Cancelados</option>
           </select>
@@ -223,7 +233,7 @@ export function Contratos() {
           </div>
         ) : contratos.map((contrato) => {
           const percHoras = contrato.horas_contratadas ? Math.min(100, Math.round((Number(contrato.horas_utilizadas) / Number(contrato.horas_contratadas)) * 100)) : 0;
-          const statusCor = contrato.status === 'activo' ? 'emerald' : contrato.status === 'expirado' ? 'red' : 'gray';
+          const statusCor = contrato.status === 'ativo' ? 'emerald' : contrato.status === 'expirado' ? 'red' : 'gray';
           
           return (
             <div key={contrato.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group overflow-hidden">
@@ -328,35 +338,19 @@ export function Contratos() {
                     {clientes.map(c => <option key={c.id} value={c.id}>{c.nome} ({c.empresa})</option>)}
                   </select>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-sm font-bold text-gray-700">Tipo de Contrato *</label>
-                    <select 
-                      name="tipo_contrato"
-                      required
-                      value={formData.tipo_contrato}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-theme-primary bg-white"
-                    >
-                      <option value="assistencia tecnica">Assistência Técnica</option>
-                      <option value="manutencao">Manutenção</option>
-                      <option value="consultoria">Consultoria</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-sm font-bold text-gray-700">Tipo de Pagamento *</label>
-                    <select 
-                      name="tipo_de_pagamento"
-                      required
-                      value={formData.tipo_de_pagamento}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-theme-primary bg-white"
-                    >
-                      <option value="horas">Horas</option>
-                      <option value="mensal">Mensal</option>
-                      <option value="anual">Anual</option>
-                    </select>
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-bold text-gray-700">Tipo de Contrato *</label>
+                  <select 
+                    name="tipo"
+                    required
+                    value={formData.tipo}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-theme-primary bg-white"
+                  >
+                    <option value="horas">Horas</option>
+                    <option value="mensal">Mensal</option>
+                    <option value="anual">Anual</option>
+                  </select>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
@@ -504,7 +498,9 @@ export function Contratos() {
                 </div>
                 <div>
                   <h3 className="text-xl font-black">Detalhes do Contrato</h3>
-                  <p className="text-xs font-bold text-white/80 uppercase tracking-widest">#{contratoDetalhe.numero || contratoDetalhe.id.substring(0, 8)}</p>
+                  <p className="text-xs font-bold text-white/80 uppercase tracking-widest">
+                    #{contratoDetalhe.id?.substring(0, 8) || 'CONTRATO'}
+                  </p>
                 </div>
               </div>
               <button onClick={() => setExibirModalDetalhes(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
@@ -546,11 +542,15 @@ export function Contratos() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Início</p>
-                  <p className="text-sm font-bold text-gray-900">{new Date(contratoDetalhe.data_inicio).toLocaleDateString('pt-PT')}</p>
+                    <p className="text-sm font-bold text-gray-900">
+                      {contratoDetalhe.data_inicio ? new Date(contratoDetalhe.data_inicio).toLocaleDateString('pt-PT') : '-'}
+                    </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Fim</p>
-                  <p className="text-sm font-bold text-gray-900">{new Date(contratoDetalhe.data_fim).toLocaleDateString('pt-PT')}</p>
+                    <p className="text-sm font-bold text-gray-900">
+                      {contratoDetalhe.data_fim ? new Date(contratoDetalhe.data_fim).toLocaleDateString('pt-PT') : '-'}
+                    </p>
                 </div>
               </div>
 
@@ -614,4 +614,3 @@ export function Contratos() {
     </div>
   );
 }
-
