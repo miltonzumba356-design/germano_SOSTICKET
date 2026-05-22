@@ -20,6 +20,12 @@ import {
   AlertCircle
 } from 'lucide-react';
 
+function getEmpresaNome(empresa: Cliente['empresa']) {
+  if (!empresa) return '';
+  if (typeof empresa === 'string') return empresa;
+  return String(empresa.nome || empresa.Email_empresa || 'Empresa');
+}
+
 export function Contratos() {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin';
@@ -57,7 +63,7 @@ export function Contratos() {
       const response = await contratosService.listar({ 
         search: busca || undefined,
         status: (filtroStatus as any) || undefined,
-        cliente: isCliente ? usuario?.id : undefined,
+        cliente_id: isCliente ? usuario?.id : undefined,
         page: pagina,
         limit: 10
       });
@@ -157,7 +163,7 @@ export function Contratos() {
           valor_total: '0',
           data_inicio: new Date().toISOString().split('T')[0],
           data_fim: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
-          status: 'ativo',
+          status: 'activo',
           observacoes: ''
         });
         setStatus('idle');
@@ -210,7 +216,7 @@ export function Contratos() {
             className="flex-1 md:flex-none bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-theme-primary text-gray-600"
           >
             <option value="">Todos Status</option>
-            <option value="ativo">Ativos</option>
+            <option value="activo">Ativos</option>
             <option value="expirado">Expirados</option>
             <option value="cancelado">Cancelados</option>
           </select>
@@ -233,7 +239,7 @@ export function Contratos() {
           </div>
         ) : contratos.map((contrato) => {
           const percHoras = contrato.horas_contratadas ? Math.min(100, Math.round((Number(contrato.horas_utilizadas) / Number(contrato.horas_contratadas)) * 100)) : 0;
-          const statusCor = contrato.status === 'ativo' ? 'emerald' : contrato.status === 'expirado' ? 'red' : 'gray';
+          const statusCor = contrato.status === 'activo' ? 'emerald' : contrato.status === 'expirado' ? 'red' : 'gray';
           
           return (
             <div key={contrato.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group overflow-hidden">
@@ -335,7 +341,10 @@ export function Contratos() {
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
                   >
                     <option value="">Selecione um cliente...</option>
-                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nome} ({c.empresa})</option>)}
+                    {clientes.map(c => {
+                      const empresaNome = getEmpresaNome(c.empresa);
+                      return <option key={c.id} value={c.id}>{c.nome}{empresaNome ? ` (${empresaNome})` : ''}</option>;
+                    })}
                   </select>
                 </div>
                 <div className="space-y-1">

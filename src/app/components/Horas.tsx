@@ -82,7 +82,7 @@ export function Horas() {
     try {
       if (tab === 'cronometro') {
         const [intervs, resumo] = await Promise.all([
-          intervencoesService.listar({ tecnico: isTecnico ? usuario?.id : undefined }),
+          intervencoesService.listar({ tecnico_id: isTecnico ? usuario?.id : undefined }),
           relatoriosService.horas()
         ]);
         

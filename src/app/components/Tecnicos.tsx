@@ -86,8 +86,16 @@ export function Tecnicos() {
 
     try {
       await tecnicosService.criar({
-        ...formData,
-        especialidades: formData.especialidades.trim()
+        nome: formData.nome,
+        email: formData.email,
+        password: formData.password,
+        telefone: formData.telefone,
+        especialidades: formData.especialidades
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
+        data_contratacao: formData.data_contratacao || null,
+        status: formData.status
       });
       
       setStatus('success');
@@ -294,13 +302,14 @@ export function Tecnicos() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-bold text-gray-700">Empresa</label>
+                  <label className="hidden">Empresa</label>
                   <input 
                     type="text" 
                     name="empresa"
+                    disabled
                     value={formData.empresa}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
+                    className="hidden" 
                     placeholder="Safira" 
                   />
                 </div>
@@ -309,9 +318,10 @@ export function Tecnicos() {
                   <input 
                     type="text" 
                     name="endereco"
+                    disabled
                     value={formData.endereco}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
+                    className="hidden" 
                     placeholder="Angola" 
                   />
                 </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Intervencao } from '../types/api';
+import type { Cliente } from '../types/api';
 import { intervencoesService, contratosService, clientesService, tecnicosService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -24,6 +25,12 @@ import {
   ShieldCheck,
   FileText
 } from 'lucide-react';
+
+function getEmpresaNome(empresa: Cliente['empresa']) {
+  if (!empresa) return '';
+  if (typeof empresa === 'string') return empresa;
+  return String(empresa.nome || empresa.Email_empresa || 'Empresa');
+}
 
 export function Intervencoes() {
   const { usuario } = useAuth();
@@ -59,6 +66,15 @@ export function Intervencoes() {
   const [intervencaoAtribuir, setIntervencaoAtribuir] = useState<Intervencao | null>(null);
   const [tecnicoSelecionado, setTecnicoSelecionado] = useState('');
   const [atribuindo, setAtribuindo] = useState(false);
+  const [exibirModalStatus, setExibirModalStatus] = useState(false);
+  const [intervencaoStatus, setIntervencaoStatus] = useState<Intervencao | null>(null);
+  const [salvandoStatus, setSalvandoStatus] = useState(false);
+  const [formStatus, setFormStatus] = useState({
+    status: 'em_andamento',
+    actuacao_tipo: 'remoto',
+    data_inicio_intervencao: '',
+    data_fim_intervencao: '',
+  });
 
   const carregarIntervencoes = async () => {
     setCarregando(true);
@@ -71,8 +87,8 @@ export function Intervencoes() {
         search: busca || undefined,
         status: filtroStatus || undefined,
         prioridade: filtroPrioridade || undefined,
-        tecnico: isTecnicoPerfil ? usuario?.id : undefined,
-        cliente: isCliente ? usuario?.id : undefined
+        tecnico_id: isTecnicoPerfil ? usuario?.id : undefined,
+        cliente_id: isCliente ? usuario?.id : undefined
       });
       
       const lista = Array.isArray(response) 
@@ -101,7 +117,7 @@ export function Intervencoes() {
       const resp = await contratosService.listar({ 
         status: 'activo', 
         limit: 50,
-        cliente: clienteFiltro
+        cliente_id: clienteFiltro
       });
       const lista = Array.isArray(resp) 
         ? resp 
@@ -181,6 +197,51 @@ export function Intervencoes() {
     setExibirModalAtribuir(true);
     if (tecnicos.length === 0) {
       carregarTecnicos();
+    }
+  };
+
+  const abrirModalStatus = (intervencao: Intervencao) => {
+    const agora = new Date().toISOString().slice(0, 16);
+    setIntervencaoStatus(intervencao);
+    setFormStatus({
+      status: intervencao.status === 'aberto' ? 'em_andamento' : (intervencao.status || 'em_andamento'),
+      actuacao_tipo: intervencao.actuacao_tipo || 'remoto',
+      data_inicio_intervencao: intervencao.data_inicio_intervencao ? new Date(intervencao.data_inicio_intervencao).toISOString().slice(0, 16) : agora,
+      data_fim_intervencao: intervencao.data_fim_intervencao ? new Date(intervencao.data_fim_intervencao).toISOString().slice(0, 16) : '',
+    });
+    setExibirModalStatus(true);
+  };
+
+  const handleAtualizarStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!intervencaoStatus) return;
+
+    setSalvandoStatus(true);
+    setErro('');
+    try {
+      const statusFinal = ['resolvido', 'fechado', 'concluido'].includes(formStatus.status);
+      if (statusFinal && !formStatus.data_fim_intervencao) {
+        throw new Error('Informe a data final para resolver ou concluir a intervenção.');
+      }
+
+      await intervencoesService.atualizacaoParcial(intervencaoStatus.id, {
+        status: formStatus.status as any,
+        actuacao_tipo: formStatus.actuacao_tipo as any,
+        data_inicio_intervencao: formStatus.data_inicio_intervencao ? new Date(formStatus.data_inicio_intervencao).toISOString() : undefined,
+        data_fim_intervencao: formStatus.data_fim_intervencao ? new Date(formStatus.data_fim_intervencao).toISOString() : undefined,
+      });
+
+      setExibirModalStatus(false);
+      setIntervencaoStatus(null);
+      await carregarIntervencoes();
+      if (exibirModalDetalhes && intervencaoDetalhe?.id === intervencaoStatus.id) {
+        setIntervencaoDetalhe(await intervencoesService.obterPorId(intervencaoStatus.id));
+      }
+    } catch (err: any) {
+      console.error('Erro ao atualizar intervenção:', err);
+      setErro(err.message || 'Falha ao atualizar a intervenção.');
+    } finally {
+      setSalvandoStatus(false);
     }
   };
 
@@ -272,6 +333,8 @@ export function Intervencoes() {
         cliente_id: clienteIdFinal,
         contrato_id: novoTicket.contrato_id || undefined,
         prioridade: novoTicket.prioridade,
+        tipo_pagamento: contratoSelecionado?.tipo_de_pagamento || 'horas',
+        tipo_intervencao: contratoSelecionado?.tipo_contrato || 'suporte',
         anexos: novoTicket.anexos
       });
       
@@ -402,7 +465,7 @@ export function Intervencoes() {
                       <option value="">Selecione...</option>
                       {clientes.map((cliente) => (
                         <option key={cliente.id} value={cliente.id}>
-                          {cliente.nome} {cliente.empresa ? `— ${cliente.empresa}` : ''}
+                          {cliente.nome} {getEmpresaNome(cliente.empresa) ? `- ${getEmpresaNome(cliente.empresa)}` : ''}
                         </option>
                       ))}
                     </select>
@@ -666,6 +729,17 @@ export function Intervencoes() {
                      </button>
                    )}
                    {usuario?.perfil === 'tecnico' && (
+                     <button
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         abrirModalStatus(intervencao);
+                       }}
+                       className="px-4 py-2 text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                     >
+                       Resolver
+                     </button>
+                   )}
+                   {usuario?.perfil === 'tecnico' && (
                      <>
                        <button className="px-4 py-2 text-xs font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors">
                          Atualizar Status
@@ -872,6 +946,90 @@ export function Intervencoes() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {exibirModalStatus && intervencaoStatus && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-theme-primary text-white">
+              <div>
+                <h3 className="text-xl font-black">Atualizar Intervenção</h3>
+                <p className="text-xs font-bold text-white/80 uppercase tracking-widest">#{intervencaoStatus.numero || intervencaoStatus.id.substring(0, 8)}</p>
+              </div>
+              <button onClick={() => setExibirModalStatus(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAtualizarStatus} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Status *</label>
+                <select
+                  required
+                  value={formStatus.status}
+                  onChange={(e) => setFormStatus((prev) => ({ ...prev, status: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                >
+                  <option value="aberto">Aberto</option>
+                  <option value="em_andamento">Em andamento</option>
+                  <option value="resolvido">Resolvido</option>
+                  <option value="concluido">Concluído</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tipo de atuação</label>
+                <select
+                  value={formStatus.actuacao_tipo}
+                  onChange={(e) => setFormStatus((prev) => ({ ...prev, actuacao_tipo: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                >
+                  <option value="remoto">Remoto</option>
+                  <option value="presencial">Presencial</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Início</label>
+                  <input
+                    type="datetime-local"
+                    value={formStatus.data_inicio_intervencao}
+                    onChange={(e) => setFormStatus((prev) => ({ ...prev, data_inicio_intervencao: e.target.value }))}
+                    className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Fim</label>
+                  <input
+                    type="datetime-local"
+                    value={formStatus.data_fim_intervencao}
+                    onChange={(e) => setFormStatus((prev) => ({ ...prev, data_fim_intervencao: e.target.value }))}
+                    className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setExibirModalStatus(false)}
+                  className="flex-1 py-3 text-sm font-black text-gray-500 uppercase tracking-widest hover:bg-gray-100 rounded-2xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoStatus}
+                  className="flex-[2] py-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 bg-theme-primary text-white shadow-indigo-100 hover:bg-theme-primary-hover disabled:opacity-50"
+                >
+                  {salvandoStatus ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+                  <span>Salvar</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

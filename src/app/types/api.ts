@@ -2,6 +2,15 @@ export type TipoPerfil = 'admin' | 'tecnico' | 'cliente';
 export type StatusUtilizador = 'activo' | 'inactivo';
 export type StatusContrato = 'activo' | 'ativo' | 'expirado' | 'cancelado';
 export type TipoPagamento = 'horas' | 'mensal' | 'anual';
+export type TipoContrato =
+  | 'assistencia tecnica'
+  | 'suporte'
+  | 'instalação'
+  | 'manutencao preventiva'
+  | 'manutencao corretiva'
+  | 'servico avulso'
+  | 'outros'
+  | 'anual';
 export type StatusIntervencao = 'aberto' | 'em_andamento' | 'resolvido' | 'fechado' | 'concluido';
 export type Prioridade = 'baixa' | 'media' | 'alta' | 'urgente';
 export type TipoAtendimento = 'presencial' | 'remoto';
@@ -26,7 +35,8 @@ export interface Usuario {
   email: string;
   perfil: TipoPerfil;
   telefone?: string;
-  empresa?: string;
+  empresa?: string | Empresa;
+  ID_POSTOS?: string;
   postos?: Record<string, unknown>;
   nif?: string;
   ip_servidor?: string;
@@ -54,7 +64,8 @@ export interface InicioSessao {
 
 export interface Cliente extends Usuario {
   perfil: 'cliente';
-  empresa?: string;
+  empresa?: string | Empresa;
+  ID_POSTOS?: string;
   nif?: string;
   endereco?: string;
   ip_servidor?: string;
@@ -70,6 +81,7 @@ export interface ClienteRequest {
   password?: string;
   perfil?: TipoPerfil;
   empresa?: string;
+  ID_POSTOS?: string;
   telefone?: string;
   nif?: string;
   ip_servidor?: string;
@@ -95,7 +107,7 @@ export interface Contrato {
   cliente_nome?: string;
   cliente?: string | Cliente;
   tipo?: TipoPagamento;
-  tipo_contrato?: string;
+  tipo_contrato?: TipoContrato;
   tipo_de_pagamento?: TipoPagamento;
   horas_contratadas?: number | string;
   horas_utilizadas?: number | string;
@@ -106,19 +118,42 @@ export interface Contrato {
   observacoes?: string;
 }
 
+export interface Empresa {
+  id: string;
+  nome?: string;
+  Email_empresa?: string;
+  email?: string;
+  telefone?: string;
+  nif?: string;
+  endereco?: string;
+  descricao?: string;
+  postos?: Record<string, unknown>;
+  status?: StatusUtilizador;
+  data_criacao?: string;
+  data_actualizacao?: string;
+  [key: string]: unknown;
+}
+
 export interface Intervencao {
   id: string;
   numero?: string;
   titulo: string;
   descricao: string;
+  actuacao_tipo?: TipoAtendimento;
+  tipo_pagamento?: TipoPagamento;
+  tipo_intervencao?: TipoContrato;
   cliente_id?: string;
   cliente_nome?: string;
   tecnico_id?: string | null;
   tecnico_nome?: string | null;
   contrato_id?: string | null;
   status?: StatusIntervencao;
+  estado?: StatusContrato;
+  sla?: string;
   prioridade?: Prioridade;
   horas_trabalhadas?: number | string;
+  data_inicio_intervencao?: string | null;
+  data_fim_intervencao?: string | null;
   data_abertura?: string;
   data_conclusao?: string | null;
   anexos?: any[];
@@ -126,6 +161,7 @@ export interface Intervencao {
   tecnico?: string | Tecnico;
   contrato?: string | Contrato;
   historico_status?: any[];
+  comentario?: any[];
   comentarios?: any[];
 }
 
@@ -143,6 +179,17 @@ export interface HoraTrabalho {
   data_trabalho: string;
   descricao: string;
   tipo: TipoAtendimento;
+}
+
+export interface Notificacao {
+  id: string;
+  tipo: string;
+  titulo: string;
+  mensagem: string;
+  link?: string;
+  lida?: boolean;
+  is_deleted?: boolean;
+  data_criacao?: string;
 }
 
 export interface PausaCronometro {

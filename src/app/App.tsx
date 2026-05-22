@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Intervencoes } from './components/Intervencoes';
 import { Clientes } from './components/Clientes';
+import { Empresas } from './components/Empresas';
 import { Tecnicos } from './components/Tecnicos';
 import { Contratos } from './components/Contratos';
 import { Relatorios } from './components/Relatorios';
@@ -47,6 +48,10 @@ function AppContent() {
     // Clientes handles
     if (paginaAtual === 'clientes' || paginaAtual.startsWith('clientes_')) {
       return <Clientes />;
+    }
+
+    if (paginaAtual === 'empresas' || paginaAtual.startsWith('empresas_')) {
+      return <Empresas />;
     }
 
     // Intervenções handles
@@ -111,4 +116,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-

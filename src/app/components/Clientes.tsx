@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Cliente, ClienteRequest } from '../types/api';
-import { clientesService } from '../services/api';
+import { Cliente, ClienteRequest, Empresa } from '../types/api';
+import { clientesService, empresasService } from '../services/api';
 import { 
   Search, 
   Plus, 
@@ -23,8 +23,29 @@ import {
   AlertCircle
 } from 'lucide-react';
 
+function getEmpresaNome(empresa: Cliente['empresa']) {
+  if (!empresa) return '';
+  if (typeof empresa === 'string') return empresa;
+  return String(empresa.nome || empresa.Email_empresa || 'Empresa');
+}
+
+function getEmpresaLabel(empresa: Empresa) {
+  return [empresa.nome, empresa.nif ? `NIF ${empresa.nif}` : undefined].filter(Boolean).join(' - ');
+}
+
+function getPostosDaEmpresa(empresa?: Empresa) {
+  if (!empresa?.postos || typeof empresa.postos !== 'object') return [];
+
+  return Object.entries(empresa.postos).map(([key, value]: [string, any]) => ({
+    key,
+    id: value && typeof value === 'object' ? value.id || key : key,
+    nome: value && typeof value === 'object' ? value.nome || key : key,
+  }));
+}
+
 export function Clientes() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState<'activo' | 'inactivo' | ''>('');
   const [carregando, setCarregando] = useState(true);
@@ -43,6 +64,7 @@ export function Clientes() {
     email: '',
     password: '',
     empresa: '',
+    ID_POSTOS: '',
     telefone: '',
     nif: '',
     ip_servidor: '',
@@ -51,9 +73,25 @@ export function Clientes() {
 
   // Atualiza os inputs quando necessário
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'empresa' ? { ID_POSTOS: '' } : {}),
+    }));
+  };
+
+  const carregarEmpresas = async () => {
+    try {
+      const response = await empresasService.listar({ limit: 100 });
+      const lista = Array.isArray(response)
+        ? response
+        : (response as any)?.results || (response as any)?.data || [];
+      setEmpresas(Array.isArray(lista) ? lista : []);
+    } catch (error) {
+      console.error('Erro ao carregar empresas:', error);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,17 +101,17 @@ export function Clientes() {
     setErro('');
     
     try {
-      // Formata os postos no formato de objeto exigido
-      const postosFormatados = listaPostos.reduce((acc, p, i) => ({
-        ...acc,
-        [`posto ${i + 1}`]: { Id: p.id, Nome: p.nome }
-      }), {});
+      if (!formData.empresa) {
+        throw new Error('Selecione uma empresa para associar este cliente.');
+      }
 
       const payload: ClienteRequest = {
-        ...formData,
-        perfil: 'cliente' as any,
-        postos: postosFormatados,
-        status: 'activo'
+        nome: formData.nome,
+        email: formData.email,
+        telefone: formData.telefone,
+        empresa: formData.empresa,
+        ID_POSTOS: formData.ID_POSTOS,
+        password: formData.password,
       };
 
       console.log('Enviando payload de criação de cliente:', payload);
@@ -92,12 +130,12 @@ export function Clientes() {
           email: '',
           password: '',
           empresa: '',
+          ID_POSTOS: '',
           telefone: '',
           nif: '',
           ip_servidor: '',
           endereco: ''
         });
-        setListaPostos([{ id: '', nome: '' }]);
         carregarClientes();
       }, 1500);
     } catch (err: any) {
@@ -134,6 +172,7 @@ export function Clientes() {
 
   useEffect(() => {
     carregarClientes();
+    carregarEmpresas();
   }, [pagina, statusFiltro]);
 
   useEffect(() => {
@@ -143,6 +182,9 @@ export function Clientes() {
     }, 500);
     return () => clearTimeout(timer);
   }, [busca]);
+
+  const empresaSelecionada = empresas.find((empresa) => empresa.id === formData.empresa);
+  const postosDaEmpresa = getPostosDaEmpresa(empresaSelecionada);
 
   return (
     <div className="space-y-6">
@@ -223,7 +265,7 @@ export function Clientes() {
                         <p className="text-sm font-bold text-gray-900">{cliente.nome}</p>
                         <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
                           <Building2 className="w-3 h-3" />
-                          <span>{cliente.empresa || 'Individual'}</span>
+                          <span>{getEmpresaNome(cliente.empresa) || 'Individual'}</span>
                         </div>
                       </div>
                     </div>
@@ -352,24 +394,52 @@ export function Clientes() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-bold text-gray-700">Empresa</label>
-                  <input 
-                    type="text" 
+                  <label className="text-sm font-bold text-gray-700">Empresa *</label>
+                  <select
                     name="empresa"
+                    required
                     value={formData.empresa}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
-                    placeholder="Nome da Empresa" 
-                  />
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  >
+                    <option value="">Selecione uma empresa...</option>
+                    {empresas.map((empresa) => (
+                      <option key={empresa.id} value={empresa.id}>{getEmpresaLabel(empresa)}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-bold text-gray-700">NIF</label>
+                  <label className="text-sm font-bold text-gray-700">Posto *</label>
+                  {postosDaEmpresa.length > 0 ? (
+                    <select
+                      name="ID_POSTOS"
+                      required
+                      value={formData.ID_POSTOS}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    >
+                      <option value="">Selecione um posto...</option>
+                      {postosDaEmpresa.map((posto) => (
+                        <option key={posto.key} value={posto.id}>{posto.nome} - {posto.id}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      name="ID_POSTOS"
+                      required
+                      value={formData.ID_POSTOS}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="ID do posto cadastrado na empresa"
+                    />
+                  )}
+                </div>
+                <div className="hidden">
                   <input 
                     type="text" 
-                    name="nif"
-                    value={formData.nif}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
+                    disabled
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 text-gray-500" 
                     placeholder="Número de Identificação Fiscal" 
                   />
                 </div>
@@ -384,7 +454,7 @@ export function Clientes() {
                     placeholder="+244 ..." 
                   />
                 </div>
-                <div className="space-y-1">
+                <div className="hidden">
                   <label className="text-sm font-bold text-gray-700">IP do Servidor</label>
                   <input 
                     type="text" 
@@ -396,8 +466,8 @@ export function Clientes() {
                   />
                 </div>
 
-                {/* Configuração Dinâmica de Postos */}
-                <div className="md:col-span-2 space-y-4">
+                {/* Configuração de postos pertence ao cadastro de empresa. */}
+                <div className="hidden">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest">Configuração de Postos</h4>
                     <button 
@@ -456,7 +526,7 @@ export function Clientes() {
                   </div>
                 </div>
 
-                <div className="md:col-span-2 space-y-1">
+                <div className="hidden">
                   <label className="text-sm font-bold text-gray-700">Endereço</label>
                   <textarea 
                     name="endereco"
@@ -532,7 +602,7 @@ export function Clientes() {
             <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 text-white">
               <div>
                 <h3 className="text-2xl font-black">{clienteSelecionado.nome}</h3>
-                <p className="text-indigo-100 text-sm font-medium">{clienteSelecionado.empresa || 'Cliente Individual'}</p>
+                <p className="text-indigo-100 text-sm font-medium">{getEmpresaNome(clienteSelecionado.empresa) || 'Cliente Individual'}</p>
               </div>
               <button onClick={() => setExibirModalDetalhes(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
                 <X className="w-6 h-6" />

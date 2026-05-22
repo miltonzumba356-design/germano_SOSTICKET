@@ -27,6 +27,17 @@ interface AuthContextData {
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
+function normalizarUsuario(dadosUsuario: any, emailFallback?: string): Usuario {
+  return {
+    id: dadosUsuario?.id || emailFallback || 'temp-id',
+    nome: dadosUsuario?.nome || dadosUsuario?.first_name || dadosUsuario?.username || emailFallback?.split('@')[0] || 'Utilizador',
+    email: dadosUsuario?.email || emailFallback || '',
+    perfil: dadosUsuario?.perfil || dadosUsuario?.role || 'cliente',
+    telefone: dadosUsuario?.telefone,
+    avatar_url: dadosUsuario?.avatar_url,
+  };
+}
+
 // Provider do contexto de autenticação
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -37,30 +48,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const carregarUsuario = async () => {
       const tokenSalvo = localStorage.getItem('auth_token');
+      const usuarioSalvo = localStorage.getItem('auth_user');
 
       if (tokenSalvo) {
         setToken(tokenSalvo);
 
+        if (usuarioSalvo) {
+          try {
+            setUsuario(JSON.parse(usuarioSalvo));
+          } catch {
+            localStorage.removeItem('auth_user');
+          }
+        }
+
         try {
           // Busca perfil do usuário usando o token
-          const perfil = await authService.getProfile();
+          const perfil = await authService.getProfile(localStorage.getItem('auth_user_email') || undefined);
 
           if (perfil) {
-            setUsuario({
-              id: perfil.id,
-              nome: perfil.nome,
-              email: perfil.email,
-              perfil: perfil.perfil,
-              telefone: perfil.telefone,
-              avatar_url: perfil.avatar_url,
-            });
+            const usuarioNormalizado = normalizarUsuario(perfil);
+            setUsuario(usuarioNormalizado);
+            localStorage.setItem('auth_user', JSON.stringify(usuarioNormalizado));
+            localStorage.setItem('auth_user_email', usuarioNormalizado.email);
           }
         } catch (error) {
           console.error('Erro ao carregar perfil:', error);
           // Se falhar, limpa o token inválido
           localStorage.removeItem('auth_token');
           localStorage.removeItem('refresh_token');
+          localStorage.removeItem('auth_user');
+          localStorage.removeItem('auth_user_email');
           setToken(null);
+          setUsuario(null);
         }
       }
 
@@ -85,30 +104,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Se não houver dados do usuário na resposta do login, busca o perfil explicitamente
       if (!dadosUsuario) {
         try {
-          dadosUsuario = await authService.getProfile();
+          dadosUsuario = await authService.getProfile(email);
         } catch (perfilError) {
           console.error('Login bem sucedido mas falha ao obter perfil:', perfilError);
         }
       }
 
       if (dadosUsuario) {
-        setUsuario({
-          id: dadosUsuario.id,
-          nome: dadosUsuario.nome || dadosUsuario.first_name || dadosUsuario.username || 'Utilizador',
-          email: dadosUsuario.email,
-          perfil: dadosUsuario.perfil || dadosUsuario.role || 'cliente',
-          telefone: dadosUsuario.telefone,
-          avatar_url: dadosUsuario.avatar_url,
-        });
+        const usuarioNormalizado = normalizarUsuario(dadosUsuario, email);
+        setUsuario(usuarioNormalizado);
+        localStorage.setItem('auth_user', JSON.stringify(usuarioNormalizado));
+        localStorage.setItem('auth_user_email', usuarioNormalizado.email);
       } else {
         // Fallback caso realmente não consiga nada, mas tenha token
         // Isso evita ficar preso na tela de login se o token for válido
-        setUsuario({
+        const usuarioFallback = {
           id: 'temp-id',
           nome: email.split('@')[0],
           email: email,
           perfil: 'cliente',
-        } as Usuario);
+        } as Usuario;
+        setUsuario(usuarioFallback);
+        localStorage.setItem('auth_user', JSON.stringify(usuarioFallback));
+        localStorage.setItem('auth_user_email', email);
       }
     } catch (error) {
       console.error('Erro no login:', error);
@@ -125,6 +143,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUsuario(null);
       setToken(null);
+      localStorage.removeItem('auth_user');
+      localStorage.removeItem('auth_user_email');
     }
   };
 

@@ -7,6 +7,7 @@ import {
   BarChart3,
   Settings,
   User,
+  Building2,
   LucideIcon
 } from 'lucide-react';
 
@@ -27,6 +28,11 @@ export const adminMenu: MenuItem[] = [
     id: 'clientes',
     label: 'Clientes',
     icon: Users,
+  },
+  {
+    id: 'empresas',
+    label: 'Empresas',
+    icon: Building2,
   },
   {
     id: 'contratos',

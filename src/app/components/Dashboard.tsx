@@ -134,8 +134,8 @@ export function Dashboard() {
       const [respIntervencoes, respDashboard, respContratos] = await Promise.all([
         intervencoesService.listar({
           limit: 5,
-          ...(isTecnico ? { tecnico: usuario?.id } : {}),
-          ...(isCliente ? { cliente: usuario?.id } : {})
+          ...(isTecnico ? { tecnico_id: usuario?.id } : {}),
+          ...(isCliente ? { cliente_id: usuario?.id } : {})
         }).catch(err => {
           console.error('Erro ao carregar intervenções:', err);
           return [];
@@ -153,8 +153,8 @@ export function Dashboard() {
         (isAdmin || isCliente
           ? contratosService.listar({
             limit: 5,
-            status: 'ativo',
-            ...(isCliente ? { cliente: usuario?.id } : {})
+            status: 'activo',
+            ...(isCliente ? { cliente_id: usuario?.id } : {})
           })
           : Promise.resolve(null)).catch(err => {
           console.error('Erro ao carregar contratos:', err);
@@ -198,6 +198,14 @@ export function Dashboard() {
     : isTecnico 
       ? 'Acompanhe as suas intervenções e produtividade.' 
       : 'Estado dos seus contratos e pedidos de suporte.';
+  const dadosIntervencoesMes = (dadosDashboard?.grafico_intervencoes_mes || []).map((item: any) => ({
+    name: item.mes ? new Date(item.mes).toLocaleDateString('pt-PT', { month: 'short' }) : 'Sem data',
+    total: Number(item.total || 0),
+  }));
+  const dadosHorasTecnico = (dadosDashboard?.grafico_horas_tecnico || []).map((item: any) => ({
+    name: item.tecnico__nome || 'Sem técnico',
+    value: Number(item.total || 0),
+  }));
 
   return (
     <div className="space-y-8 pb-8">
@@ -291,7 +299,7 @@ export function Dashboard() {
             />
             <StatCard
               titulo="Concluídas (Mês)"
-              valor={dadosDashboard?.intervencoes_concluidas_mes ?? 0}
+              valor={dadosDashboard?.intervencoes_concluidas ?? 0}
               icon={TrendingUp}
               cor="bg-emerald-600"
               carregando={carregando}
@@ -301,28 +309,28 @@ export function Dashboard() {
           <>
             <StatCard
               titulo="Meus Tickets"
-              valor={dadosDashboard?.total_atribuido ?? 0}
+              valor={dadosDashboard?.intervencoes_atribuidas ?? 0}
               icon={Ticket}
               cor="bg-blue-600"
               carregando={carregando}
             />
             <StatCard
               titulo="Em Andamento"
-              valor={dadosDashboard?.em_andamento ?? 0}
+              valor={dadosDashboard?.intervencoes_em_andamento ?? 0}
               icon={Clock}
               cor="bg-amber-600"
               carregando={carregando}
             />
             <StatCard
               titulo="Concluído (Mês)"
-              valor={dadosDashboard?.concluido_mes ?? 0}
+              valor={dadosDashboard?.intervencoes_concluidas_mes ?? 0}
               icon={CheckCircle}
               cor="bg-emerald-600"
               carregando={carregando}
             />
             <StatCard
               titulo="Horas Trabalhadas"
-              valor={`${dadosDashboard?.horas_mes ?? 0}h`}
+              valor={`${dadosDashboard?.total_horas_mes ?? 0}h`}
               icon={TrendingUp}
               cor="bg-theme-primary"
               carregando={carregando}
@@ -341,7 +349,7 @@ export function Dashboard() {
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dadosDashboard?.grafico_intervencoes_mes?.length > 0 ? dadosDashboard.grafico_intervencoes_mes : dadosMockStatus}>
+              <BarChart data={dadosIntervencoesMes.length > 0 ? dadosIntervencoesMes : dadosMockStatus}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
@@ -365,7 +373,7 @@ export function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={dadosDashboard?.grafico_horas_tecnico?.length > 0 ? dadosDashboard.grafico_horas_tecnico : dadosMockHorasTecnico}
+                    data={dadosHorasTecnico.length > 0 ? dadosHorasTecnico : dadosMockHorasTecnico}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -373,7 +381,7 @@ export function Dashboard() {
                     paddingAngle={8}
                     dataKey="value"
                   >
-                    {(dadosDashboard?.grafico_horas_tecnico?.length > 0 ? dadosDashboard.grafico_horas_tecnico : dadosMockHorasTecnico).map((entry: any, index: number) => (
+                    {(dadosHorasTecnico.length > 0 ? dadosHorasTecnico : dadosMockHorasTecnico).map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
