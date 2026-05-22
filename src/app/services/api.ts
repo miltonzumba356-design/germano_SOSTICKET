@@ -134,7 +134,28 @@ function errorMessage(data: any, fallback: string) {
   if (data.error) return data.error;
 
   const firstFieldError = Object.values(data).flat().find(Boolean);
-  return typeof firstFieldError === 'string' ? firstFieldError : fallback;
+  if (typeof firstFieldError === 'string') return firstFieldError;
+
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return fallback;
+  }
+}
+
+function shouldKeepPathWithoutTrailingSlash(pathname: string) {
+  return ['/perfil', '/perfil/password', '/configuracoes'].includes(pathname);
+}
+
+function withBackendTrailingSlash(path: string) {
+  const normalized = normalizePath(path);
+  const [pathname, query = ''] = normalized.split('?');
+
+  if (pathname.endsWith('/') || shouldKeepPathWithoutTrailingSlash(pathname)) {
+    return normalized;
+  }
+
+  return `${pathname}/${query ? `?${query}` : ''}`;
 }
 
 export async function fetchAPI<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -149,14 +170,15 @@ export async function fetchAPI<T>(path: string, options: RequestInit = {}): Prom
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const url = `${API_BASE_URL}${normalizePath(path)}`;
+  const normalizedPath = withBackendTrailingSlash(path);
+  const url = `${API_BASE_URL}${normalizedPath}`;
   let response = await fetch(url, {
     ...options,
     headers,
   });
 
-  if (response.status === 404 && !normalizePath(path).split('?')[0].endsWith('/')) {
-    const [pathname, query = ''] = normalizePath(path).split('?');
+  if (response.status === 404 && !normalizedPath.split('?')[0].endsWith('/')) {
+    const [pathname, query = ''] = normalizedPath.split('?');
     response = await fetch(`${API_BASE_URL}${pathname}/${query ? `?${query}` : ''}`, {
       ...options,
       headers,
