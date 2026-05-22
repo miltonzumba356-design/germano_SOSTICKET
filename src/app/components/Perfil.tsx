@@ -1,166 +1,285 @@
-import { useState } from 'react';
-import { User, Lock, Bell, LogOut, Camera, Mail, Phone, MapPin, Shield, CheckCircle2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertCircle, Camera, CheckCircle2, Loader2, Lock, LogOut, Mail, Phone, Save, Shield, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { perfilService } from '../services/api';
+import { Usuario } from '../types/api';
 
 export function Perfil() {
   const { usuario, logout } = useAuth();
   const [abaAtiva, setAbaAtiva] = useState<'info' | 'senha' | 'notificacoes'>('info');
+  const [perfil, setPerfil] = useState<Usuario | null>(usuario);
+  const [formData, setFormData] = useState({
+    nome: usuario?.nome || '',
+    telefone: usuario?.telefone || '',
+    avatar_url: usuario?.avatar_url || '',
+  });
+  const [senha, setSenha] = useState({
+    password_atual: '',
+    password_nova: '',
+    confirmar: '',
+  });
+  const [preferencias, setPreferencias] = useState<Record<string, boolean>>({
+    novos_clientes: true,
+    relatorio_semanal: true,
+    alertas_sla: true,
+    acesso_conta: false,
+  });
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  const [sucesso, setSucesso] = useState('');
+
+  const carregarPerfil = async () => {
+    setCarregando(true);
+    setErro('');
+    try {
+      const response = await perfilService.listar();
+      const dados = Array.isArray(response) ? response[0] : (response as any)?.results?.[0] || response;
+      setPerfil(dados as Usuario);
+      setFormData({
+        nome: dados?.nome || '',
+        telefone: dados?.telefone || '',
+        avatar_url: dados?.avatar_url || '',
+      });
+      if (dados?.preferencias && typeof dados.preferencias === 'object') {
+        setPreferencias((prev) => ({ ...prev, ...(dados.preferencias as Record<string, boolean>) }));
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar perfil:', error);
+      setErro(error?.message || 'Não foi possível carregar o perfil.');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarPerfil();
+  }, []);
+
+  const handleSalvarPerfil = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSalvando(true);
+    setErro('');
+    setSucesso('');
+
+    try {
+      const atualizado = await perfilService.atualizar({
+        nome: formData.nome,
+        telefone: formData.telefone,
+        avatar_url: formData.avatar_url,
+        preferencias,
+      });
+      const dados = { ...(perfil || usuario), ...(atualizado || {}), ...formData, preferencias } as Usuario;
+      setPerfil(dados);
+      localStorage.setItem('auth_user', JSON.stringify(dados));
+      setSucesso('Perfil atualizado com sucesso.');
+    } catch (error: any) {
+      console.error('Erro ao atualizar perfil:', error);
+      setErro(error?.message || 'Falha ao atualizar perfil.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const handleAlterarSenha = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (senha.password_nova !== senha.confirmar) {
+      setErro('A nova password e a confirmação não coincidem.');
+      return;
+    }
+
+    setSalvando(true);
+    setErro('');
+    setSucesso('');
+    try {
+      await perfilService.alterarSenha({
+        password_atual: senha.password_atual,
+        password_nova: senha.password_nova,
+      });
+      setSenha({ password_atual: '', password_nova: '', confirmar: '' });
+      setSucesso('Password alterada com sucesso.');
+    } catch (error: any) {
+      console.error('Erro ao alterar password:', error);
+      setErro(error?.message || 'Falha ao alterar password.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const nomePerfil = perfil?.nome || usuario?.nome || 'Utilizador';
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-12">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Meu Perfil</h2>
-          <p className="text-gray-500 mt-1">Gerencie suas informações e preferências de segurança.</p>
+          <p className="text-gray-500 mt-1">Gerencie dados pessoais, preferências e segurança.</p>
         </div>
         <button onClick={logout} className="flex items-center gap-2 px-4 py-2 text-red-600 font-bold hover:bg-red-50 rounded-xl transition-all">
           <LogOut className="w-5 h-5" />
-          Sair do Sistema
+          Sair
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Card de Perfil Esquerdo */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden text-center p-8">
-            <div className="relative inline-block mb-6">
-              <div className="w-32 h-32 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-full flex items-center justify-center text-white text-4xl font-black shadow-xl shadow-indigo-100 border-4 border-white">
-                {usuario?.nome.substring(0,1).toUpperCase()}
+      {erro && <Message type="error" text={erro} />}
+      {sucesso && <Message type="success" text={sucesso} />}
+
+      {carregando ? (
+        <div className="py-24 flex justify-center bg-white rounded-3xl border border-gray-100">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-1 space-y-6">
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden text-center p-8">
+              <div className="relative inline-block mb-6">
+                <div className="w-32 h-32 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-full flex items-center justify-center text-white text-4xl font-black shadow-xl shadow-indigo-100 border-4 border-white">
+                  {nomePerfil.substring(0, 1).toUpperCase()}
+                </div>
+                <div className="absolute bottom-1 right-1 p-2 bg-white rounded-full shadow-lg border border-gray-100 text-indigo-600">
+                  <Camera className="w-4 h-4" />
+                </div>
               </div>
-              <button className="absolute bottom-1 right-1 p-2 bg-white rounded-full shadow-lg border border-gray-100 text-indigo-600 hover:scale-110 transition-transform">
-                <Camera className="w-4 h-4" />
-              </button>
+              <h3 className="text-xl font-bold text-gray-900">{nomePerfil}</h3>
+              <p className="text-sm font-medium text-indigo-600 bg-indigo-50 inline-block px-3 py-1 rounded-full mt-2 uppercase tracking-wider">
+                {perfil?.perfil || usuario?.perfil}
+              </p>
+              <div className="mt-8 space-y-4 text-left">
+                <Info icon={Mail} text={perfil?.email || usuario?.email || '-'} />
+                <Info icon={Phone} text={perfil?.telefone || 'Sem telefone'} />
+              </div>
             </div>
-            <h3 className="text-xl font-bold text-gray-900">{usuario?.nome}</h3>
-            <p className="text-sm font-medium text-indigo-600 bg-indigo-50 inline-block px-3 py-1 rounded-full mt-2 uppercase tracking-wider">
-              {usuario?.perfil}
-            </p>
-            
-            <div className="mt-8 space-y-4 text-left">
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <Mail className="w-4 h-4 text-gray-400" />
-                <span>{usuario?.email}</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <Phone className="w-4 h-4 text-gray-400" />
-                <span>+244 923 000 000</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <MapPin className="w-4 h-4 text-gray-400" />
-                <span>Luanda, Angola</span>
+
+            <div className="bg-indigo-600 rounded-3xl p-6 text-white shadow-xl shadow-indigo-100 relative overflow-hidden">
+              <Shield className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" />
+              <h4 className="text-lg font-bold mb-2">Conta Ativa</h4>
+              <p className="text-sm text-white/80 leading-relaxed mb-4">Perfil autenticado com JWT e permissões do backend.</p>
+              <div className="inline-flex items-center gap-2 text-xs font-bold bg-white/20 px-3 py-1.5 rounded-lg">
+                <CheckCircle2 className="w-3 h-3" /> STATUS OK
               </div>
             </div>
           </div>
 
-          <div className="bg-indigo-600 rounded-3xl p-6 text-white shadow-xl shadow-indigo-100 relative overflow-hidden group">
-            <Shield className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10 group-hover:scale-110 transition-transform duration-500" />
-            <h4 className="text-lg font-bold mb-2">Conta Verificada</h4>
-            <p className="text-sm text-white/80 leading-relaxed mb-4">A sua conta possui todos os privilégios de administrador do sistema.</p>
-            <div className="flex items-center gap-2 text-xs font-bold bg-white/20 inline-block px-3 py-1.5 rounded-lg">
-              <CheckCircle2 className="w-3 h-3" /> SECURITY STATUS: OK
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-8 px-8 border-b border-gray-100">
+                <TabLink active={abaAtiva === 'info'} onClick={() => setAbaAtiva('info')} label="Dados Pessoais" />
+                <TabLink active={abaAtiva === 'senha'} onClick={() => setAbaAtiva('senha')} label="Segurança" />
+                <TabLink active={abaAtiva === 'notificacoes'} onClick={() => setAbaAtiva('notificacoes')} label="Notificações" />
+              </div>
+
+              <div className="p-8">
+                {abaAtiva === 'info' && (
+                  <form onSubmit={handleSalvarPerfil} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <InputField label="Nome" value={formData.nome} onChange={(value) => setFormData((prev) => ({ ...prev, nome: value }))} required />
+                      <InputField label="Email" value={perfil?.email || usuario?.email || ''} disabled />
+                      <InputField label="Telefone" value={formData.telefone} onChange={(value) => setFormData((prev) => ({ ...prev, telefone: value }))} />
+                      <InputField label="Avatar URL" value={formData.avatar_url} onChange={(value) => setFormData((prev) => ({ ...prev, avatar_url: value }))} />
+                    </div>
+                    <SubmitButton saving={salvando} label="Atualizar Perfil" />
+                  </form>
+                )}
+
+                {abaAtiva === 'senha' && (
+                  <form onSubmit={handleAlterarSenha} className="space-y-6 max-w-md">
+                    <InputField label="Password Atual" type="password" value={senha.password_atual} onChange={(value) => setSenha((prev) => ({ ...prev, password_atual: value }))} required />
+                    <InputField label="Nova Password" type="password" value={senha.password_nova} onChange={(value) => setSenha((prev) => ({ ...prev, password_nova: value }))} required />
+                    <InputField label="Confirmar Nova Password" type="password" value={senha.confirmar} onChange={(value) => setSenha((prev) => ({ ...prev, confirmar: value }))} required />
+                    <SubmitButton saving={salvando} label="Alterar Password" />
+                  </form>
+                )}
+
+                {abaAtiva === 'notificacoes' && (
+                  <form onSubmit={handleSalvarPerfil} className="space-y-6">
+                    <NotificationToggle label="Alertas de Novos Clientes" checked={!!preferencias.novos_clientes} onChange={(checked) => setPreferencias((prev) => ({ ...prev, novos_clientes: checked }))} />
+                    <NotificationToggle label="Relatório Semanal" checked={!!preferencias.relatorio_semanal} onChange={(checked) => setPreferencias((prev) => ({ ...prev, relatorio_semanal: checked }))} />
+                    <NotificationToggle label="Alertas de SLA" checked={!!preferencias.alertas_sla} onChange={(checked) => setPreferencias((prev) => ({ ...prev, alertas_sla: checked }))} />
+                    <NotificationToggle label="Acesso à Conta" checked={!!preferencias.acesso_conta} onChange={(checked) => setPreferencias((prev) => ({ ...prev, acesso_conta: checked }))} />
+                    <SubmitButton saving={salvando} label="Salvar Preferências" />
+                  </form>
+                )}
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Abas de Configuração Direita */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="flex items-center gap-8 px-8 border-b border-gray-100">
-              <TabLink active={abaAtiva === 'info'} onClick={() => setAbaAtiva('info')} label="Dados Pessoais" />
-              <TabLink active={abaAtiva === 'senha'} onClick={() => setAbaAtiva('senha')} label="Segurança" />
-              <TabLink active={abaAtiva === 'notificacoes'} onClick={() => setAbaAtiva('notificacoes')} label="Notificações" />
-            </div>
-
-            <div className="p-8">
-               {abaAtiva === 'info' && (
-                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     <InputField label="Nome de Exibição" value={usuario?.nome} />
-                     <InputField label="Email Principal" value={usuario?.email} disabled />
-                     <InputField label="Telefone" value="+244 923 000 000" />
-                     <InputField label="Cargo / Departamento" value="Administração Central" />
-                   </div>
-                   <div className="pt-6">
-                     <button className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
-                       Atualizar Informações
-                     </button>
-                   </div>
-                 </div>
-               )}
-
-               {abaAtiva === 'senha' && (
-                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                   <p className="text-sm text-gray-500 mb-4">Recomendamos que altere a sua password a cada 90 dias.</p>
-                   <div className="max-w-md space-y-4">
-                     <InputField label="Password Atual" type="password" placeholder="••••••••" />
-                     <InputField label="Nova Password" type="password" placeholder="Mínimo 8 caracteres" />
-                     <InputField label="Confirmar Nova Password" type="password" placeholder="Repita a nova password" />
-                   </div>
-                   <div className="pt-6">
-                     <button className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
-                       Alterar Password
-                     </button>
-                   </div>
-                 </div>
-               )}
-
-               {abaAtiva === 'notificacoes' && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                    <NotificationToggle label="Alertas de Novos Clientes" description="Receber e-mail quando um novo cliente se registar." checked={true} />
-                    <NotificationToggle label="Relatório Semanal" description="Receber resumo financeiro e operacional todas as segundas." checked={true} />
-                    <NotificationToggle label="Alertas de SLA" description="Notificar quando um ticket estiver próximo do vencimento." checked={true} />
-                    <NotificationToggle label="Acesso à Conta" description="Alertar via e-mail quando for feito login num novo dispositivo." checked={false} />
-                  </div>
-               )}
-            </div>
-          </div>
-        </div>
-
-      </div>
+      )}
     </div>
   );
 }
 
-function TabLink({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) {
+function Message({ type, text }: { type: 'error' | 'success'; text: string }) {
+  const isError = type === 'error';
+  const Icon = isError ? AlertCircle : CheckCircle2;
   return (
-    <button 
-      onClick={onClick}
-      className={`py-6 text-sm font-bold transition-all border-b-2 ${
-        active ? 'text-indigo-600 border-indigo-600' : 'text-gray-400 border-transparent hover:text-gray-600'
-      }`}
-    >
+    <div className={`flex items-center gap-2 p-4 rounded-xl border text-sm font-bold ${isError ? 'bg-red-50 border-red-100 text-red-700' : 'bg-emerald-50 border-emerald-100 text-emerald-700'}`}>
+      <Icon className="w-5 h-5" />
+      {text}
+    </div>
+  );
+}
+
+function Info({ icon: Icon, text }: { icon: any; text: string }) {
+  return (
+    <div className="flex items-center gap-3 text-sm text-gray-600">
+      <Icon className="w-4 h-4 text-gray-400" />
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function TabLink({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button onClick={onClick} className={`py-6 text-sm font-bold transition-all border-b-2 ${active ? 'text-indigo-600 border-indigo-600' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>
       {label}
     </button>
   );
 }
 
-function InputField({ label, value, placeholder, type = "text", disabled = false }: { label: string, value?: string, placeholder?: string, type?: string, disabled?: boolean }) {
+function InputField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  disabled = false,
+  required = false,
+}: {
+  label: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  type?: string;
+  disabled?: boolean;
+  required?: boolean;
+}) {
   return (
     <div className="space-y-2">
       <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">{label}</label>
-      <input 
-        type={type} 
-        defaultValue={value}
-        placeholder={placeholder}
+      <input
+        type={type}
+        value={value || ''}
+        onChange={(event) => onChange?.(event.target.value)}
         disabled={disabled}
-        className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm font-medium text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed" 
+        required={required}
+        className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm font-medium text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
       />
     </div>
   );
 }
 
-function NotificationToggle({ label, description, checked }: { label: string, description: string, checked: boolean }) {
+function NotificationToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <div className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl border border-gray-50 hover:border-gray-100 transition-all">
-       <div>
-         <p className="text-sm font-bold text-gray-900">{label}</p>
-         <p className="text-xs text-gray-500 mt-0.5">{description}</p>
-       </div>
-       <div className="relative">
-          <input type="checkbox" defaultChecked={checked} className="peer sr-only" id={label} />
-          <label htmlFor={label} className="block w-12 h-6 bg-gray-300 rounded-full peer-checked:bg-emerald-500 transition-colors cursor-pointer after:content-[''] after:absolute after:top-1 after:left-1 after:w-4 after:h-4 after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-6"></label>
-       </div>
-    </div>
+    <label className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl border border-gray-50 hover:border-gray-100 transition-all">
+      <span className="text-sm font-bold text-gray-900">{label}</span>
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="w-5 h-5 accent-emerald-500" />
+    </label>
+  );
+}
+
+function SubmitButton({ saving, label }: { saving: boolean; label: string }) {
+  return (
+    <button type="submit" disabled={saving} className="inline-flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50">
+      {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+      {label}
+    </button>
   );
 }
