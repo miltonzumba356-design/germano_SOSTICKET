@@ -129,6 +129,15 @@ function unwrapResponse<T>(data: any): T {
 function errorMessage(data: any, fallback: string) {
   if (!data) return fallback;
   if (typeof data === 'string') return data;
+  if (data.error?.details) {
+    const details = data.error.details;
+    const messages = Object.entries(details).flatMap(([field, value]) => {
+      const list = Array.isArray(value) ? value : [value];
+      return list.map((message) => `${field}: ${String(message)}`);
+    });
+    if (messages.length) return messages.join(' ');
+  }
+  if (data.error?.message) return data.error.message;
   if (data.detail) return data.detail;
   if (data.message) return data.message;
   if (data.error) return data.error;
@@ -208,6 +217,108 @@ const update = <T>(path: string, data: unknown, method: 'PUT' | 'PATCH' = 'PUT')
     method,
     body: data instanceof FormData ? data : JSON.stringify(data),
   });
+
+async function fetchFile(path: string, options: RequestInit = {}) {
+  const headers = new Headers(options.headers);
+  const token = getToken();
+
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${withBackendTrailingSlash(path)}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const data = await parseResponse(response);
+    throw new ApiError(response.status, errorMessage(data, `Erro ${response.status} ao baixar ficheiro.`), data);
+  }
+
+  return response.blob();
+}
+
+function normalizeContrato(contrato: any): Contrato {
+  if (!contrato || typeof contrato !== 'object') return contrato;
+
+  return {
+    ...contrato,
+    cliente_id: contrato.cliente_id || contrato.empresa_id,
+    cliente_nome: contrato.cliente_nome || contrato.empresa || contrato.empresa_detalhe?.nome,
+    cliente: contrato.cliente || contrato.empresa_detalhe || contrato.empresa,
+    tipo: contrato.tipo || contrato.tipo_de_pagamento,
+  };
+}
+
+function normalizeContratoResponse<T>(response: T): T {
+  const data: any = response;
+
+  if (Array.isArray(data)) {
+    return data.map(normalizeContrato) as T;
+  }
+
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data.results)) {
+      return { ...data, results: data.results.map(normalizeContrato) } as T;
+    }
+
+    if (Array.isArray(data.data)) {
+      return { ...data, data: data.data.map(normalizeContrato) } as T;
+    }
+
+    if (Array.isArray(data.data?.results)) {
+      return {
+        ...data,
+        data: {
+          ...data.data,
+          results: data.data.results.map(normalizeContrato),
+        },
+      } as T;
+    }
+
+    return normalizeContrato(data) as T;
+  }
+
+  return response;
+}
+
+function contratoPayload(dados: Partial<Contrato> & { cliente_id?: string; empresa_id?: string }, usarPadroes = false) {
+  const {
+    cliente,
+    cliente_id,
+    cliente_nome,
+    empresa,
+    empresa_detalhe,
+    empresa_id,
+    expiracao,
+    horas_disponiveis,
+    horas_utilizadas,
+    intervencoes,
+    numero,
+    tipo,
+    valor_hora,
+    ...rest
+  } = dados as any;
+
+  const payload: any = {
+    ...rest,
+    empresa_id: empresa_id || cliente_id,
+  };
+
+  const tipoPagamento = dados.tipo_de_pagamento || tipo;
+  if (tipoPagamento || usarPadroes) payload.tipo_de_pagamento = tipoPagamento || 'horas';
+  if (dados.tipo_contrato || usarPadroes) payload.tipo_contrato = dados.tipo_contrato || 'suporte';
+  if (!payload.descricao_contrato && usarPadroes) {
+    payload.descricao_contrato = payload.observacoes || 'Contrato de suporte técnico.';
+  }
+
+  Object.keys(payload).forEach((key) => {
+    if (payload[key] === undefined) delete payload[key];
+  });
+
+  return payload;
+}
 
 export const authService = {
   async login(email: string, password: string): Promise<InicioSessao> {
@@ -297,16 +408,27 @@ export const perfilService = {
 };
 
 export const contratosService = {
-  listar: (params?: QueryParams) => list<Contrato>('/contratos', params),
-  obterPorId: (id: string) => fetchAPI<Contrato>(`/contratos/${id}`),
-  criar: (dados: Partial<Contrato> & { cliente_id: string }) =>
-    create<Contrato>('/contratos', {
-      ...dados,
-      tipo_de_pagamento: dados.tipo_de_pagamento || dados.tipo,
-      tipo_contrato: dados.tipo_contrato || 'suporte',
-    }),
-  atualizar: (id: string, dados: Partial<Contrato>) => update<Contrato>(`/contratos/${id}`, dados),
-  atualizacaoParcial: (id: string, dados: Partial<Contrato>) => update<Contrato>(`/contratos/${id}`, dados, 'PATCH'),
+  async listar(params?: QueryParams) {
+    const response = await list<Contrato>('/contratos', params);
+    return normalizeContratoResponse(response);
+  },
+  async obterPorId(id: string) {
+    const response = await fetchAPI<Contrato>(`/contratos/${id}`);
+    return normalizeContrato(response);
+  },
+  async criar(dados: Partial<Contrato> & { cliente_id?: string; empresa_id?: string }) {
+    const response = await create<Contrato>('/contratos', contratoPayload(dados, true));
+    return normalizeContrato(response);
+  },
+  async atualizar(id: string, dados: Partial<Contrato>) {
+    const response = await update<Contrato>(`/contratos/${id}`, contratoPayload(dados));
+    return normalizeContrato(response);
+  },
+  async atualizacaoParcial(id: string, dados: Partial<Contrato>) {
+    const response = await update<Contrato>(`/contratos/${id}`, contratoPayload(dados), 'PATCH');
+    return normalizeContrato(response);
+  },
+  baixarPdf: (id: string) => fetchFile(`/contratos/${id}/pdf`),
   deletar: (id: string) => fetchAPI<void>(`/contratos/${id}`, { method: 'DELETE' }),
 };
 
@@ -334,7 +456,7 @@ export const intervencoesService = {
   criar: (dados: {
     titulo: string;
     descricao: string;
-    cliente_id: string;
+    cliente_id?: string;
     contrato_id?: string;
     prioridade: string;
     tipo_pagamento?: string;
@@ -345,12 +467,9 @@ export const intervencoesService = {
     const formData = new FormData();
     formData.append('titulo', dados.titulo);
     formData.append('descricao', dados.descricao);
-    formData.append('cliente_id', dados.cliente_id);
+    if (dados.cliente_id) formData.append('cliente_id', dados.cliente_id);
     if (dados.contrato_id) formData.append('contrato_id', dados.contrato_id);
     formData.append('prioridade', dados.prioridade);
-    formData.append('tipo_pagamento', dados.tipo_pagamento || 'horas');
-    formData.append('tipo_intervencao', dados.tipo_intervencao || 'suporte');
-    if (dados.actuacao_tipo) formData.append('actuacao_tipo', dados.actuacao_tipo);
     dados.anexos?.forEach((file) => {
       formData.append('anexos', file);
     });
@@ -392,8 +511,7 @@ export const notificacoesService = {
   listar: (params?: QueryParams) => list<Notificacao>('/notificacoes', params),
   obterPorId: (id: string) => fetchAPI<Notificacao>(`/notificacoes/${id}`),
   async marcarLida(id: string) {
-    const notificacao = await fetchAPI<Notificacao>(`/notificacoes/${id}`);
-    return update<Notificacao>(`/notificacoes/${id}/lida`, { ...notificacao, lida: true }, 'PUT');
+    return update<Notificacao>(`/notificacoes/${id}`, {}, 'PUT');
   },
   marcarTodasLidas: () =>
     update<Notificacao>('/notificacoes/marcar-todas-lidas', {

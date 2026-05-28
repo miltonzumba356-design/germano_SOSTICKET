@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { Contrato, Cliente } from '../types/api';
+import { formatarHoras } from '../utils/formatters';
 import { contratosService, clientesService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -24,6 +27,103 @@ function getEmpresaNome(empresa: Cliente['empresa']) {
   if (!empresa) return '';
   if (typeof empresa === 'string') return empresa;
   return String(empresa.nome || empresa.Email_empresa || 'Empresa');
+}
+
+function getEmpresaId(empresa: Cliente['empresa'] | unknown) {
+  if (!empresa || typeof empresa === 'string') return undefined;
+  return (empresa as { id?: string }).id;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatarData(data?: string) {
+  if (!data) return '-';
+  return new Date(data).toLocaleDateString('pt-PT');
+}
+
+function contratoHtml(contrato: Contrato, autoPrint = false) {
+  const empresa = contrato.cliente_nome || (typeof contrato.empresa === 'string' ? contrato.empresa : contrato.empresa?.nome) || contrato.empresa_detalhe?.nome || 'Empresa';
+
+  return `<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <title>Contrato ${escapeHtml(contrato.numero || contrato.id)}</title>
+  <style>
+    @page { size: A4; margin: 32px; }
+    body { font-family: "Segoe UI", Arial, sans-serif; color: #1e293b; font-size: 13px; line-height: 1.65; background: #f8fafc; }
+    .document { background: #fff; padding: 42px; border-radius: 18px; }
+    .header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 24px; margin-bottom: 28px; border-bottom: 2px solid #e2e8f0; }
+    h1 { margin: 0; color: #2563eb; font-size: 30px; }
+    h2 { margin: 0; color: #0f172a; font-size: 20px; }
+    .muted { color: #64748b; }
+    .contacts { margin-top: 18px; font-size: 12px; color: #475569; }
+    .section { margin-bottom: 32px; }
+    .section-title { font-size: 15px; font-weight: 700; color: #2563eb; margin-bottom: 16px; padding-left: 12px; border-left: 4px solid #2563eb; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { background: #f8fafc; padding: 16px; border-radius: 14px; }
+    .label { font-size: 11px; color: #64748b; text-transform: uppercase; }
+    .value { font-size: 14px; font-weight: 700; color: #0f172a; margin-top: 5px; }
+    .status { display: inline-block; padding: 6px 12px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; font-weight: 700; font-size: 11px; }
+    .observacoes { background: #f8fafc; padding: 18px; border-radius: 14px; min-height: 64px; }
+    .assinaturas { margin-top: 70px; display: flex; justify-content: space-between; }
+    .assinatura { width: 240px; text-align: center; }
+    .linha { border-top: 1px solid #94a3b8; padding-top: 8px; color: #475569; }
+    .footer { margin-top: 46px; text-align: center; color: #94a3b8; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="document">
+    <div class="header">
+      <div>
+        <h1>SOSTicket</h1>
+        <p class="muted">Assistência Técnica e Consultoria</p>
+        <div class="contacts">
+          <div><strong>Tel:</strong> +244 9XX XXX XXX</div>
+          <div><strong>Email:</strong> contacto@empresa.com</div>
+          <div><strong>Morada:</strong> Luanda, Angola</div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <h2>Relatório de Contrato</h2>
+        <p class="muted">${escapeHtml(contrato.numero || contrato.id)}</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Dados do Contrato</div>
+      <div class="info-grid">
+        <div class="card"><div class="label">Empresa</div><div class="value">${escapeHtml(empresa)}</div></div>
+        <div class="card"><div class="label">Tipo</div><div class="value">${escapeHtml(contrato.tipo_contrato)}</div></div>
+        <div class="card"><div class="label">Pagamento</div><div class="value">${escapeHtml(contrato.tipo_de_pagamento || contrato.tipo)}</div></div>
+        <div class="card"><div class="label">Estado</div><div class="value"><span class="status">${escapeHtml(contrato.status)}</span></div></div>
+        <div class="card"><div class="label">Horas Contratadas</div><div class="value">${escapeHtml(contrato.horas_contratadas)}</div></div>
+        <div class="card"><div class="label">Horas Utilizadas</div><div class="value">${escapeHtml(contrato.horas_utilizadas)}</div></div>
+        <div class="card"><div class="label">Valor Hora</div><div class="value">${escapeHtml(contrato.valor_hora)} Kz</div></div>
+        <div class="card"><div class="label">Valor Total</div><div class="value">${escapeHtml(contrato.valor_total)} Kz</div></div>
+        <div class="card"><div class="label">Início</div><div class="value">${formatarData(contrato.data_inicio)}</div></div>
+        <div class="card"><div class="label">Fim</div><div class="value">${formatarData(contrato.data_fim)}</div></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Observações</div>
+      <div class="observacoes">${escapeHtml(contrato.observacoes || 'Sem observações.')}</div>
+    </div>
+    <div class="assinaturas">
+      <div class="assinatura"><div class="linha">Responsável Técnico</div></div>
+      <div class="assinatura"><div class="linha">Cliente</div></div>
+    </div>
+    <div class="footer">Documento gerado automaticamente pelo sistema SOSTicket.</div>
+  </div>
+  ${autoPrint ? '<script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));</script>' : ''}
+</body>
+</html>`;
 }
 
 export function Contratos() {
@@ -53,6 +153,7 @@ export function Contratos() {
     data_inicio: new Date().toISOString().split('T')[0],
     data_fim: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
     status: 'activo' as any,
+    descricao_contrato: '',
     observacoes: ''
   });
 
@@ -63,7 +164,7 @@ export function Contratos() {
       const response = await contratosService.listar({ 
         search: busca || undefined,
         status: (filtroStatus as any) || undefined,
-        cliente_id: isCliente ? usuario?.id : undefined,
+        empresa_id: isCliente ? getEmpresaId(usuario?.empresa) : undefined,
         page: pagina,
         limit: 10
       });
@@ -139,16 +240,23 @@ export function Contratos() {
     setErro('');
 
     try {
+      const clienteSelecionado = clientes.find((cliente) => cliente.id === formData.cliente_id);
+      const empresaId = getEmpresaId(clienteSelecionado?.empresa);
+
+      if (!empresaId) {
+        throw new Error('O cliente selecionado não tem empresa associada no backend.');
+      }
+
       await contratosService.criar({
-        cliente_id: formData.cliente_id,
+        empresa_id: empresaId,
         tipo_contrato: 'suporte', // Valor padrão ou vindo do form
         tipo_de_pagamento: formData.tipo as any,
         horas_contratadas: String(formData.horas_contratadas),
-        horas_utilizadas: String(formData.horas_utilizadas),
         valor_total: String(formData.valor_total),
         data_inicio: formData.data_inicio,
         data_fim: formData.data_fim,
         status: formData.status as any,
+        descricao_contrato: formData.descricao_contrato.trim() || 'Contrato de suporte técnico.',
         observacoes: formData.observacoes
       });
       
@@ -164,6 +272,7 @@ export function Contratos() {
           data_inicio: new Date().toISOString().split('T')[0],
           data_fim: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
           status: 'activo',
+          descricao_contrato: '',
           observacoes: ''
         });
         setStatus('idle');
@@ -174,6 +283,135 @@ export function Contratos() {
       setErro(err.message || 'Falha ao criar novo contrato.');
       setStatus('error');
       setTimeout(() => setStatus('idle'), 3000);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const proximoDia = (data?: string) => {
+    const base = data ? new Date(data) : new Date();
+    base.setDate(base.getDate() + 1);
+    return base.toISOString().split('T')[0];
+  };
+
+  const maisUmAno = (data?: string) => {
+    const base = data ? new Date(data) : new Date();
+    base.setFullYear(base.getFullYear() + 1);
+    return base.toISOString().split('T')[0];
+  };
+
+  const handleRenovarContrato = async (contrato: Contrato) => {
+    const empresaId = contrato.empresa_id || getEmpresaId(contrato.empresa_detalhe) || getEmpresaId(contrato.cliente);
+    if (!empresaId) {
+      setErro('Não foi possível identificar a empresa deste contrato para renovar.');
+      return;
+    }
+
+    if (!window.confirm(`Deseja renovar o contrato de ${contrato.cliente_nome || contrato.empresa || 'empresa'}?`)) return;
+
+    setCarregando(true);
+    setErro('');
+    try {
+      await contratosService.criar({
+        empresa_id: empresaId,
+        tipo_contrato: contrato.tipo_contrato || 'suporte',
+        tipo_de_pagamento: contrato.tipo_de_pagamento || contrato.tipo || 'horas',
+        descricao_contrato: contrato.descricao_contrato,
+        horas_contratadas: contrato.horas_contratadas,
+        valor_total: contrato.valor_total,
+        data_inicio: proximoDia(contrato.data_fim),
+        data_fim: maisUmAno(contrato.data_fim),
+        status: 'activo',
+        observacoes: contrato.observacoes,
+      });
+      await carregarContratos();
+    } catch (err: any) {
+      console.error('Erro ao renovar contrato:', err);
+      setErro(err.message || 'Falha ao renovar contrato.');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const handleCancelarContrato = async (contrato: Contrato) => {
+    if (!window.confirm(`Deseja cancelar o contrato ${contrato.numero || contrato.id.substring(0, 8)}?`)) return;
+    setCarregando(true);
+    setErro('');
+    try {
+      await contratosService.atualizacaoParcial(contrato.id, { status: 'cancelado' });
+      await carregarContratos();
+    } catch (err: any) {
+      console.error('Erro ao cancelar contrato:', err);
+      setErro(err.message || 'Falha ao cancelar contrato.');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const handleBaixarPdf = async (contrato: Contrato) => {
+    setErro('');
+    const iframe = document.createElement('iframe');
+    try {
+      iframe.style.position = 'fixed';
+      iframe.style.left = '-10000px';
+      iframe.style.top = '0';
+      iframe.style.width = '794px';
+      iframe.style.height = '1123px';
+      iframe.srcdoc = contratoHtml(contrato);
+
+      const carregou = new Promise<void>((resolve) => {
+        iframe.onload = () => resolve();
+      });
+      document.body.appendChild(iframe);
+      await carregou;
+
+      const documento = iframe.contentDocument;
+      if (!documento?.body) throw new Error('Não foi possível preparar o contrato para PDF.');
+
+      const canvas = await html2canvas(documento.body, {
+        scale: 2,
+        backgroundColor: '#f8fafc',
+        useCORS: true,
+      });
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const image = canvas.toDataURL('image/png');
+
+      let position = 0;
+      let remainingHeight = imgHeight;
+      pdf.addImage(image, 'PNG', 0, position, imgWidth, imgHeight);
+      remainingHeight -= pageHeight;
+
+      while (remainingHeight > 0) {
+        position = remainingHeight - imgHeight;
+        pdf.addPage();
+        pdf.addImage(image, 'PNG', 0, position, imgWidth, imgHeight);
+        remainingHeight -= pageHeight;
+      }
+
+      pdf.save(`contrato_${contrato.numero || contrato.id.substring(0, 8)}.pdf`);
+    } catch (err: any) {
+      console.error('Erro ao baixar contrato:', err);
+      setErro(err.message || 'Falha ao baixar o contrato em PDF.');
+    } finally {
+      iframe.remove();
+    }
+  };
+
+  const handleEliminarContrato = async (contrato: Contrato) => {
+    if (!window.confirm(`Deseja eliminar definitivamente o contrato ${contrato.numero || contrato.id.substring(0, 8)}?`)) return;
+    setCarregando(true);
+    setErro('');
+    try {
+      await contratosService.deletar(contrato.id);
+      await carregarContratos();
+    } catch (err: any) {
+      console.error('Erro ao eliminar contrato:', err);
+      setErro(err.message || 'Falha ao eliminar contrato.');
     } finally {
       setCarregando(false);
     }
@@ -279,7 +517,7 @@ export function Contratos() {
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-gray-400" />
-                        <span className="text-gray-600">Uso de Horas: <span className="font-bold text-gray-900">{contrato.horas_utilizadas}h</span> / {contrato.horas_contratadas}h</span>
+                      <span className="text-gray-600">Uso de Horas: <span className="font-bold text-gray-900">{formatarHoras(contrato.horas_utilizadas)}</span> / {formatarHoras(contrato.horas_contratadas)}</span>
                       </div>
                       <span className={`font-bold ${percHoras > 90 ? 'text-red-600' : percHoras > 70 ? 'text-amber-600' : 'text-emerald-600'}`}>{percHoras}%</span>
                     </div>
@@ -295,22 +533,27 @@ export function Contratos() {
                 )}
               </div>
               
-              <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-50 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="flex items-center gap-4">
+              <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <button 
                     onClick={() => handleVerDetalhes(contrato.id)}
-                    className="text-sm font-bold text-theme-primary hover:text-theme-primary-hover flex items-center gap-1"
+                    className="px-3 py-2 text-sm font-bold text-theme-primary bg-white border border-theme-primary/20 hover:bg-theme-primary-light rounded-lg flex items-center gap-1"
                   >
                     Ver Detalhes <ArrowRight className="w-4 h-4" />
                   </button>
-                  <button className="text-sm font-bold text-gray-500 hover:text-amber-600">Editar</button>
                 </div>
-                <div className="flex items-center gap-2">
-                   <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Cancelar Contrato">
-                    <XCircle className="w-4 h-4" />
+                <div className="flex flex-wrap items-center gap-2">
+                   <button
+                    onClick={() => handleEliminarContrato(contrato)}
+                    className="px-3 py-2 text-xs font-black uppercase tracking-widest text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                  >
+                    Eliminar
                   </button>
-                  <button className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Renovar">
-                    <CheckCircle2 className="w-4 h-4" />
+                  <button
+                    onClick={() => handleRenovarContrato(contrato)}
+                    className="px-3 py-2 text-xs font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Renovar
                   </button>
                 </div>
               </div>
@@ -393,6 +636,18 @@ export function Contratos() {
                     value={formData.valor_total}
                     onChange={handleInputChange}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-theme-primary" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-bold text-gray-700">Descrição do Contrato *</label>
+                  <textarea
+                    name="descricao_contrato"
+                    required
+                    value={formData.descricao_contrato}
+                    onChange={handleInputChange}
+                    rows={3}
+                    placeholder="Ex.: Contrato de suporte técnico e manutenção."
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-theme-primary"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -572,21 +827,21 @@ export function Contratos() {
                     <Clock className="w-4 h-4 text-indigo-600" />
                     <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Horas Contratadas</p>
                   </div>
-                  <p className="text-xl font-black text-indigo-700">{contratoDetalhe.horas_contratadas}h</p>
+                  <p className="text-xl font-black text-indigo-700">{formatarHoras(contratoDetalhe.horas_contratadas)}</p>
                 </div>
                 <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100">
                   <div className="flex items-center gap-2 mb-2">
                     <TrendingUp className="w-4 h-4 text-amber-600" />
                     <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest">Horas Utilizadas</p>
                   </div>
-                  <p className="text-xl font-black text-amber-700">{contratoDetalhe.horas_utilizadas}h</p>
+                  <p className="text-xl font-black text-amber-700">{formatarHoras(contratoDetalhe.horas_utilizadas)}</p>
                 </div>
                 <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Horas Disponíveis</p>
                   </div>
-                  <p className="text-xl font-black text-emerald-700">{contratoDetalhe.horas_disponiveis}h</p>
+                  <p className="text-xl font-black text-emerald-700">{formatarHoras(contratoDetalhe.horas_disponiveis)}</p>
                 </div>
               </div>
 
@@ -610,6 +865,12 @@ export function Contratos() {
             </div>
             
             <div className="p-6 border-t border-gray-100 flex justify-end bg-gray-50/50">
+              <button
+                onClick={() => handleBaixarPdf(contratoDetalhe)}
+                className="mr-3 px-8 py-3 bg-white border border-theme-primary text-theme-primary text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-theme-primary-light transition-all"
+              >
+                Baixar PDF
+              </button>
               <button 
                 onClick={() => setExibirModalDetalhes(false)}
                 className="px-8 py-3 bg-theme-primary text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-indigo-100 hover:bg-theme-primary-hover transition-all"

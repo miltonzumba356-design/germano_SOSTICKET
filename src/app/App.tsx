@@ -42,7 +42,7 @@ function AppContent() {
   const renderizarPagina = () => {
     // Dashboard handles
     if (paginaAtual === 'dashboard' || paginaAtual.startsWith('dashboard_')) {
-      return <Dashboard />;
+      return <Dashboard onNavigate={setPaginaAtual} />;
     }
     
     // Clientes handles
@@ -56,7 +56,7 @@ function AppContent() {
 
     // Intervenções handles
     if (paginaAtual === 'intervencoes' || paginaAtual.startsWith('intervencoes_')) {
-      return <Intervencoes />;
+      return <Intervencoes onNavigate={setPaginaAtual} />;
     }
 
     // Tecnicos handles

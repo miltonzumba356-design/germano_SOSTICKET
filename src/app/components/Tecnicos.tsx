@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Tecnico } from '../types/api';
 import { tecnicosService } from '../services/api';
+import { formatarHoras } from '../utils/formatters';
 import { 
   Plus, 
   Search, 
@@ -28,6 +29,9 @@ export function Tecnicos() {
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
   const [exibirModal, setExibirModal] = useState(false);
+  const [exibirPerformance, setExibirPerformance] = useState(false);
+  const [tecnicoPerformance, setTecnicoPerformance] = useState<Tecnico | null>(null);
+  const [carregandoPerformance, setCarregandoPerformance] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   
   // Estado do formulário de novo técnico
@@ -125,6 +129,21 @@ export function Tecnicos() {
     }
   };
 
+  const abrirPerformance = async (tecnico: Tecnico) => {
+    setCarregandoPerformance(true);
+    setErro('');
+    try {
+      const detalhe = await tecnicosService.obterPorId(tecnico.id);
+      setTecnicoPerformance(detalhe);
+      setExibirPerformance(true);
+    } catch (err: any) {
+      console.error('Erro ao carregar performance do técnico:', err);
+      setErro(err.message || 'Falha ao carregar performance do técnico.');
+    } finally {
+      setCarregandoPerformance(false);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -180,7 +199,7 @@ export function Tecnicos() {
                     <CheckCircle className="w-3 h-3 text-white" />
                   </div>
                 </div>
-                <button className="p-1.5 hover:bg-gray-100 rounded-lg"><MoreVertical className="w-5 h-5 text-gray-400" /></button>
+                <button onClick={() => abrirPerformance(tecnico)} className="p-1.5 hover:bg-gray-100 rounded-lg"><MoreVertical className="w-5 h-5 text-gray-400" /></button>
               </div>
 
               <div className="mb-6">
@@ -213,14 +232,18 @@ export function Tecnicos() {
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400 font-medium mb-1">Horas/Mês</p>
-                  <span className="font-bold text-gray-900">{tecnico.total_horas_mes || 0}h</span>
+                  <span className="font-bold text-gray-900">{formatarHoras(tecnico.total_horas_mes)}</span>
                 </div>
               </div>
             </div>
 
             <div className="px-6 py-4 bg-gray-50/50 flex items-center justify-between border-t border-gray-100 group-hover:bg-indigo-600 transition-colors">
-              <button className="flex items-center gap-2 text-xs font-bold text-indigo-600 group-hover:text-white transition-colors">
-                <BarChart3 className="w-4 h-4" />
+              <button
+                onClick={() => abrirPerformance(tecnico)}
+                disabled={carregandoPerformance}
+                className="flex items-center gap-2 text-xs font-bold text-indigo-600 group-hover:text-white transition-colors disabled:opacity-60"
+              >
+                {carregandoPerformance ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
                 VER PERFORMANCE
               </button>
               <button className="text-gray-400 group-hover:text-white/80">
@@ -385,6 +408,70 @@ export function Tecnicos() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {exibirPerformance && tecnicoPerformance && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden">
+            <div className="p-6 bg-indigo-600 text-white flex items-center justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-indigo-100">Performance técnica</p>
+                <h3 className="text-2xl font-black">{tecnicoPerformance.nome}</h3>
+                <p className="text-sm text-indigo-100">{tecnicoPerformance.email}</p>
+              </div>
+              <button onClick={() => setExibirPerformance(false)} className="p-2 hover:bg-white/20 rounded-full">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-5 bg-indigo-50 rounded-2xl border border-indigo-100">
+                  <p className="text-xs font-black text-indigo-400 uppercase tracking-widest">Intervenções ativas</p>
+                  <p className="text-3xl font-black text-indigo-700 mt-2">{tecnicoPerformance.intervencoes_ativas || 0}</p>
+                </div>
+                <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100">
+                  <p className="text-xs font-black text-emerald-400 uppercase tracking-widest">Horas registadas</p>
+                  <p className="text-3xl font-black text-emerald-700 mt-2">{formatarHoras(tecnicoPerformance.total_horas_mes)}</p>
+                </div>
+                <div className="p-5 bg-amber-50 rounded-2xl border border-amber-100">
+                  <p className="text-xs font-black text-amber-400 uppercase tracking-widest">Status</p>
+                  <p className="text-2xl font-black text-amber-700 mt-2 capitalize">{tecnicoPerformance.status || 'activo'}</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-3">Especialidades</h4>
+                <div className="flex flex-wrap gap-2">
+                  {(Array.isArray(tecnicoPerformance.especialidades) ? tecnicoPerformance.especialidades : []).length > 0 ? (
+                    (tecnicoPerformance.especialidades as string[]).map((item, index) => (
+                      <span key={index} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-bold">{item}</span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-gray-500">Sem especialidades registadas.</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-3">Histórico de intervenções</h4>
+                <div className="border border-gray-100 rounded-2xl overflow-hidden">
+                  {tecnicoPerformance.historico_intervencoes?.length ? tecnicoPerformance.historico_intervencoes.map((item: any) => (
+                    <div key={item.id} className="px-4 py-3 border-b border-gray-50 last:border-b-0 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">#{item.numero} - {item.titulo}</p>
+                        <p className="text-xs text-gray-500 capitalize">{String(item.status || '').replace('_', ' ')}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-300" />
+                    </div>
+                  )) : (
+                    <div className="px-4 py-10 text-center text-sm text-gray-500">Sem histórico de intervenções.</div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

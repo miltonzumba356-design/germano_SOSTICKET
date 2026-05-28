@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Ticket,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { intervencoesService, relatoriosService, contratosService } from '../services/api';
 import { Intervencao, Contrato } from '../types/api';
+import { formatarHoras } from '../utils/formatters';
 import {
   BarChart,
   Bar,
@@ -35,6 +37,12 @@ import {
   Area
 } from 'recharts';
 
+function getEmpresaId(empresa: unknown) {
+  if (!empresa || typeof empresa === 'string') return undefined;
+  return (empresa as { id?: string }).id;
+}
+
+
 // Componente de card estatístico
 function StatCard({
   titulo,
@@ -43,7 +51,8 @@ function StatCard({
   cor,
   subtitulo,
   tendencia,
-  carregando
+  carregando,
+  actions
 }: {
   titulo: string;
   valor: string | number;
@@ -52,19 +61,23 @@ function StatCard({
   subtitulo?: string;
   tendencia?: { valor: string, tipo: 'up' | 'down' };
   carregando?: boolean;
+  actions?: ReactNode;
 }) {
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300">
+    <div className="relative bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300">
       <div className="flex items-center justify-between mb-4">
         <div className={`p-3 rounded-xl ${cor} bg-opacity-10`}>
           <Icon className={`w-6 h-6 ${cor.replace('bg-', 'text-')}`} />
         </div>
-        {tendencia && (
-          <div className={`flex items-center gap-1 text-xs font-medium ${tendencia.tipo === 'up' ? 'text-emerald-600' : 'text-red-600'}`}>
-            {tendencia.tipo === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-            {tendencia.valor}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {tendencia && (
+            <div className={`flex items-center gap-1 text-xs font-medium ${tendencia.tipo === 'up' ? 'text-emerald-600' : 'text-red-600'}`}>
+              {tendencia.tipo === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+              {tendencia.valor}
+            </div>
+          )}
+          {actions}
+        </div>
       </div>
       <div>
         <p className="text-sm font-medium text-gray-500 mb-1">{titulo}</p>
@@ -79,13 +92,58 @@ function StatCard({
   );
 }
 
+function ActionMenu({
+  id,
+  activeId,
+  setActiveId,
+  items,
+}: {
+  id: string;
+  activeId: string | null;
+  setActiveId: (id: string | null) => void;
+  items: Array<{ label: string; onClick: () => void; danger?: boolean }>;
+}) {
+  const aberto = activeId === id;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={(event) => {
+          event.stopPropagation();
+          setActiveId(aberto ? null : id);
+        }}
+        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+      {aberto && (
+        <div className="absolute right-0 top-9 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-[80] overflow-hidden">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={(event) => {
+                event.stopPropagation();
+                setActiveId(null);
+                item.onClick();
+              }}
+              className={`w-full px-4 py-2.5 text-left text-sm font-bold hover:bg-gray-50 ${item.danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700'}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Dados mock para os gráficos
-const dadosMockStatus = [
-  { name: 'Abertas', total: 12, fill: '#3b82f6' },
-  { name: 'Andamento', total: 8, fill: '#f59e0b' },
-  { name: 'Resolvidas', total: 15, fill: '#10b981' },
-  { name: 'Fechadas', total: 5, fill: '#6b7280' },
-  { name: 'Concluídas', total: 20, fill: '#8b5cf6' },
+const dadosStatusBase = [
+  { chave: 'aberto', name: 'Abertas', total: 0 },
+  { chave: 'em_andamento', name: 'Em andamento', total: 0 },
+  { chave: 'resolvido', name: 'Resolvidas', total: 0 },
+  { chave: 'fechado', name: 'Fechadas', total: 0 },
+  { chave: 'concluido', name: 'Concluídas', total: 0 },
 ];
 
 const dadosMockHorasTecnico = [
@@ -97,33 +155,88 @@ const dadosMockHorasTecnico = [
 
 const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-const dadosMockReceita = [
-  { month: 'Jan', receita: 450000 },
-  { month: 'Fev', receita: 520000 },
-  { month: 'Mar', receita: 480000 },
-  { month: 'Abr', receita: 610000 },
-  { month: 'Mai', receita: 590000 },
-];
+function mesLabel(data: Date) {
+  return data.toLocaleDateString('pt-PT', { month: 'short' });
+}
 
-const dadosMockEvolucao = [
-  { date: '01/05', total: 10 },
-  { date: '05/05', total: 15 },
-  { date: '10/05', total: 12 },
-  { date: '15/05', total: 20 },
-  { date: '20/05', total: 18 },
-  { date: '25/05', total: 25 },
-];
+function normalizarLista<T>(response: any): T[] {
+  const lista = Array.isArray(response) ? response : response?.results || response?.data?.results || response?.data || [];
+  return Array.isArray(lista) ? lista : [];
+}
 
-export function Dashboard() {
+function intervencoesPorStatus(intervencoes: Intervencao[]) {
+  const status = dadosStatusBase.map((item) => ({ ...item }));
+
+  intervencoes.forEach((intervencao) => {
+    const item = status.find((statusItem) => statusItem.chave === intervencao.status);
+    if (item) item.total += 1;
+  });
+
+  return status.map(({ name, total }) => ({ name, total }));
+}
+
+function serieMensalContratos(contratos: Contrato[]) {
+  const hoje = new Date();
+  const meses = Array.from({ length: 6 }, (_, index) => {
+    const data = new Date(hoje.getFullYear(), hoje.getMonth() - (5 - index), 1);
+    return {
+      chave: `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`,
+      month: mesLabel(data),
+      receita: 0,
+    };
+  });
+
+  contratos.forEach((contrato) => {
+    const data = contrato.data_inicio ? new Date(contrato.data_inicio) : null;
+    if (!data || Number.isNaN(data.getTime())) return;
+    const chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
+    const item = meses.find((mes) => mes.chave === chave);
+    if (item) item.receita += Number(contrato.valor_total || 0);
+  });
+
+  return meses.map(({ month, receita }) => ({ month, receita }));
+}
+
+function serieMensalIntervencoes(intervencoes: Intervencao[], dadosDashboard: any) {
+  const apiSeries = (dadosDashboard?.grafico_intervencoes_mes || []).map((item: any) => ({
+    date: item.mes ? new Date(item.mes).toLocaleDateString('pt-PT', { month: 'short' }) : 'Sem data',
+    total: Number(item.total || 0),
+  }));
+  if (apiSeries.length) return apiSeries;
+
+  const hoje = new Date();
+  const meses = Array.from({ length: 6 }, (_, index) => {
+    const data = new Date(hoje.getFullYear(), hoje.getMonth() - (5 - index), 1);
+    return {
+      chave: `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`,
+      date: mesLabel(data),
+      total: 0,
+    };
+  });
+
+  intervencoes.forEach((intervencao) => {
+    const data = intervencao.data_abertura ? new Date(intervencao.data_abertura) : null;
+    if (!data || Number.isNaN(data.getTime())) return;
+    const chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
+    const item = meses.find((mes) => mes.chave === chave);
+    if (item) item.total += 1;
+  });
+
+  return meses.map(({ date, total }) => ({ date, total }));
+}
+
+export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => void }) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin';
   const isTecnico = usuario?.perfil === 'tecnico';
   const isCliente = usuario?.perfil === 'cliente';
   const [intervencoes, setIntervencoes] = useState<Intervencao[]>([]);
   const [contratosExpira, setContratosExpira] = useState<Contrato[]>([]);
+  const [contratosDashboard, setContratosDashboard] = useState<Contrato[]>([]);
   const [dadosDashboard, setDadosDashboard] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
+  const [menuAberto, setMenuAberto] = useState<string | null>(null);
 
   const carregarDados = async () => {
     setCarregando(true);
@@ -133,7 +246,7 @@ export function Dashboard() {
       // Carregar dados em paralelo, mas tratar erros individualmente
       const [respIntervencoes, respDashboard, respContratos] = await Promise.all([
         intervencoesService.listar({
-          limit: 5,
+          limit: 100,
           ...(isTecnico ? { tecnico_id: usuario?.id } : {}),
           ...(isCliente ? { cliente_id: usuario?.id } : {})
         }).catch(err => {
@@ -152,9 +265,8 @@ export function Dashboard() {
         }),
         (isAdmin || isCliente
           ? contratosService.listar({
-            limit: 5,
-            status: 'activo',
-            ...(isCliente ? { cliente_id: usuario?.id } : {})
+            limit: 100,
+            ...(isCliente ? { empresa_id: getEmpresaId(usuario?.empresa) } : {})
           })
           : Promise.resolve(null)).catch(err => {
           console.error('Erro ao carregar contratos:', err);
@@ -163,15 +275,17 @@ export function Dashboard() {
       ]);
 
       // Extração simplificada de dados
-      const intervencoesData = Array.isArray(respIntervencoes) ? respIntervencoes : (respIntervencoes as any)?.results || (respIntervencoes as any)?.data || [];
+      const intervencoesData = normalizarLista<Intervencao>(respIntervencoes);
       setIntervencoes(intervencoesData);
       
       const dashData = respDashboard?.data || respDashboard || {};
       setDadosDashboard(dashData);
 
       if (respContratos) {
-        const contractsData = Array.isArray(respContratos) ? respContratos : (respContratos as any)?.results || (respContratos as any)?.data || [];
+        const contractsData = normalizarLista<Contrato>(respContratos);
+        setContratosDashboard(contractsData);
         const expira = contractsData.filter((c: any) => {
+          if (c.status && !['activo', 'ativo'].includes(c.status)) return false;
           if (!c.data_fim) return false;
           const dataFim = new Date(c.data_fim);
           const hoje = new Date();
@@ -198,14 +312,21 @@ export function Dashboard() {
     : isTecnico 
       ? 'Acompanhe as suas intervenções e produtividade.' 
       : 'Estado dos seus contratos e pedidos de suporte.';
-  const dadosIntervencoesMes = (dadosDashboard?.grafico_intervencoes_mes || []).map((item: any) => ({
-    name: item.mes ? new Date(item.mes).toLocaleDateString('pt-PT', { month: 'short' }) : 'Sem data',
-    total: Number(item.total || 0),
-  }));
+  const dadosIntervencoesStatus = intervencoesPorStatus(intervencoes);
   const dadosHorasTecnico = (dadosDashboard?.grafico_horas_tecnico || []).map((item: any) => ({
     name: item.tecnico__nome || 'Sem técnico',
     value: Number(item.total || 0),
   }));
+  const receitaMensal = Array.isArray(dadosDashboard?.receita_historico) && dadosDashboard.receita_historico.length
+    ? dadosDashboard.receita_historico
+    : serieMensalContratos(contratosDashboard);
+  const evolucaoIntervencoes = serieMensalIntervencoes(intervencoes, isAdmin ? dadosDashboard : null);
+  const ultimasIntervencoes = intervencoes.slice(0, 5);
+  const periodoAtual = new Date().toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
+  const menu = (id: string, items: Array<{ label: string; onClick: () => void; danger?: boolean }>) => (
+    <ActionMenu id={id} activeId={menuAberto} setActiveId={setMenuAberto} items={items} />
+  );
+  const atualizarItem = { label: 'Atualizar dados', onClick: carregarDados };
 
   return (
     <div className="space-y-8 pb-8">
@@ -219,7 +340,7 @@ export function Dashboard() {
         <div className="flex items-center gap-3">
           <div className="bg-white border border-gray-200 rounded-lg px-4 py-2 flex items-center gap-2 text-sm text-gray-600 shadow-sm">
             <Calendar className="w-4 h-4" />
-            <span>Maio, 2024</span>
+            <span className="capitalize">{periodoAtual}</span>
           </div>
           <button
             onClick={carregarDados}
@@ -248,6 +369,7 @@ export function Dashboard() {
               cor="bg-blue-600"
               tendencia={{ valor: '0%', tipo: 'up' }}
               carregando={carregando}
+              actions={menu('card-clientes', [atualizarItem, { label: 'Ver clientes', onClick: () => onNavigate?.('clientes') }])}
             />
             <StatCard
               titulo="Contratos Ativos"
@@ -256,6 +378,7 @@ export function Dashboard() {
               cor="bg-emerald-600"
               tendencia={{ valor: '0%', tipo: 'up' }}
               carregando={carregando}
+              actions={menu('card-contratos', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }])}
             />
             <StatCard
               titulo="Intervenções Abertas"
@@ -264,6 +387,7 @@ export function Dashboard() {
               cor="bg-amber-600"
               tendencia={{ valor: '0', tipo: 'up' }}
               carregando={carregando}
+              actions={menu('card-intervencoes', [atualizarItem, { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') }])}
             />
             <StatCard
               titulo="Receita Total"
@@ -272,6 +396,7 @@ export function Dashboard() {
               cor="bg-indigo-600"
               tendencia={{ valor: '0%', tipo: 'up' }}
               carregando={carregando}
+              actions={menu('card-receita', [atualizarItem, { label: 'Ver relatórios', onClick: () => onNavigate?.('relatorios') }, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }])}
             />
           </>
         ) : isCliente ? (
@@ -282,13 +407,15 @@ export function Dashboard() {
               icon={FileText}
               cor="bg-violet-600"
               carregando={carregando}
+              actions={menu('card-cliente-contratos', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }])}
             />
             <StatCard
               titulo="Horas Disponíveis"
-              valor={dadosDashboard?.total_horas_disponiveis !== undefined ? `${dadosDashboard.total_horas_disponiveis}h` : "0h"}
+              valor={formatarHoras(dadosDashboard?.total_horas_disponiveis)}
               icon={Clock}
               cor="bg-indigo-600"
               carregando={carregando}
+              actions={menu('card-cliente-horas', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }, { label: 'Ver intervencoes', onClick: () => onNavigate?.('intervencoes') }])}
             />
             <StatCard
               titulo="Tickets Abertos"
@@ -296,6 +423,7 @@ export function Dashboard() {
               icon={Ticket}
               cor="bg-amber-600"
               carregando={carregando}
+              actions={menu('card-cliente-tickets', [atualizarItem, { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') }])}
             />
             <StatCard
               titulo="Concluídas (Mês)"
@@ -303,6 +431,7 @@ export function Dashboard() {
               icon={TrendingUp}
               cor="bg-emerald-600"
               carregando={carregando}
+              actions={menu('card-cliente-concluidas', [atualizarItem, { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') }])}
             />
           </>
         ) : (
@@ -313,6 +442,7 @@ export function Dashboard() {
               icon={Ticket}
               cor="bg-blue-600"
               carregando={carregando}
+              actions={menu('card-tecnico-tickets', [atualizarItem, { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') }])}
             />
             <StatCard
               titulo="Em Andamento"
@@ -320,6 +450,7 @@ export function Dashboard() {
               icon={Clock}
               cor="bg-amber-600"
               carregando={carregando}
+              actions={menu('card-tecnico-andamento', [atualizarItem, { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') }])}
             />
             <StatCard
               titulo="Concluído (Mês)"
@@ -327,13 +458,15 @@ export function Dashboard() {
               icon={CheckCircle}
               cor="bg-emerald-600"
               carregando={carregando}
+              actions={menu('card-tecnico-concluido', [atualizarItem, { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') }])}
             />
             <StatCard
               titulo="Horas Trabalhadas"
-              valor={`${dadosDashboard?.total_horas_mes ?? 0}h`}
+              valor={formatarHoras(dadosDashboard?.total_horas_mes)}
               icon={TrendingUp}
               cor="bg-theme-primary"
               carregando={carregando}
+              actions={menu('card-tecnico-horas', [atualizarItem, { label: 'Registo de horas', onClick: () => onNavigate?.('horas') }])}
             />
           </>
         )}
@@ -345,11 +478,14 @@ export function Dashboard() {
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-lg font-bold text-gray-900">Intervenções por Status</h3>
-            <button className="text-gray-400 hover:text-gray-600"><MoreVertical className="w-5 h-5" /></button>
+            {menu('grafico-status', isCliente
+              ? [atualizarItem, { label: 'Ver minhas intervencoes', onClick: () => onNavigate?.('intervencoes') }]
+              : [atualizarItem, { label: 'Ver intervencoes', onClick: () => onNavigate?.('intervencoes') }, { label: 'Ver relatorios', onClick: () => onNavigate?.('relatorios') }]
+            )}
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dadosIntervencoesMes.length > 0 ? dadosIntervencoesMes : dadosMockStatus}>
+              <BarChart data={dadosIntervencoesStatus}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
@@ -367,7 +503,7 @@ export function Dashboard() {
           <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-lg font-bold text-gray-900">Horas por Técnico</h3>
-              <button className="text-gray-400 hover:text-gray-600"><MoreVertical className="w-5 h-5" /></button>
+              {menu('grafico-horas-tecnico', [atualizarItem, { label: 'Ver técnicos', onClick: () => onNavigate?.('tecnicos') }, { label: 'Ver relatórios', onClick: () => onNavigate?.('relatorios') }])}
             </div>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -399,11 +535,12 @@ export function Dashboard() {
               <h3 className="text-lg font-bold text-gray-900">Receita Mensal</h3>
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">+12.5%</span>
+                {menu('grafico-receita', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }, { label: 'Ver relatórios', onClick: () => onNavigate?.('relatorios') }])}
               </div>
             </div>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dadosDashboard?.receita_historico || dadosMockReceita}>
+                <LineChart data={receitaMensal.length ? receitaMensal : [{ month: 'Sem dados', receita: 0 }]}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
@@ -426,11 +563,14 @@ export function Dashboard() {
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-lg font-bold text-gray-900">Evolução de Intervenções</h3>
-            <button className="text-gray-400 hover:text-gray-600"><MoreVertical className="w-5 h-5" /></button>
+            {menu('grafico-evolucao', isCliente
+              ? [atualizarItem, { label: 'Ver minhas intervencoes', onClick: () => onNavigate?.('intervencoes') }]
+              : [atualizarItem, { label: 'Ver intervencoes', onClick: () => onNavigate?.('intervencoes') }, { label: 'Ver relatorios', onClick: () => onNavigate?.('relatorios') }]
+            )}
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={dadosMockEvolucao}>
+              <AreaChart data={evolucaoIntervencoes.length ? evolucaoIntervencoes : [{ date: 'Sem dados', total: 0 }]}>
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2} />
@@ -454,7 +594,15 @@ export function Dashboard() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
             <h3 className="text-lg font-bold text-gray-900">{isAdmin ? 'Últimas Intervenções' : 'Meus Tickets Recentes'}</h3>
-            <button className="text-theme-primary text-sm font-semibold hover:opacity-80">Ver todas</button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onNavigate?.('intervencoes')}
+                className="text-theme-primary text-sm font-semibold hover:opacity-80"
+              >
+                Ver todas
+              </button>
+              {menu('tabela-intervencoes', [atualizarItem, { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') }])}
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -469,7 +617,7 @@ export function Dashboard() {
               <tbody className="divide-y divide-gray-50">
                 {carregando ? (
                   <tr><td colSpan={4} className="text-center py-8"><Loader2 className="animate-spin inline-block text-gray-300" /></td></tr>
-                ) : intervencoes.map(ticket => (
+                ) : ultimasIntervencoes.length > 0 ? ultimasIntervencoes.map(ticket => (
                   <tr key={ticket.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
@@ -486,10 +634,17 @@ export function Dashboard() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"><MoreVertical className="w-4 h-4 text-gray-400" /></button>
+                      {menu(`ticket-${ticket.id}`, [
+                        { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') },
+                        atualizarItem,
+                      ])}
                     </td>
                   </tr>
-                ))}
+                )) : (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-10 text-center text-sm text-gray-400">Sem intervenções recentes.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -499,7 +654,15 @@ export function Dashboard() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
               <h3 className="text-lg font-bold text-gray-900">Contratos a Expirar</h3>
-              <button className="text-theme-primary text-sm font-semibold hover:opacity-80">Ver todos</button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onNavigate?.('contratos')}
+                  className="text-theme-primary text-sm font-semibold hover:opacity-80"
+                >
+                  Ver todos
+                </button>
+                {menu('tabela-contratos-expirar', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }])}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -522,20 +685,9 @@ export function Dashboard() {
                       </td>
                     </tr>
                   )) : (
-                    <>
-                      <tr className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4 text-sm font-bold text-gray-900">#CONT-2024-08</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">Empresa Alpha</td>
-                        <td className="px-6 py-4 text-sm font-bold text-red-600">12/05/2024</td>
-                        <td className="px-6 py-4"><span className="px-2.5 py-1 text-xs font-bold rounded-full bg-red-100 text-red-700">5 DIAS</span></td>
-                      </tr>
-                      <tr className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4 text-sm font-bold text-gray-900">#CONT-2024-12</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">Tech Services</td>
-                        <td className="px-6 py-4 text-sm font-bold text-orange-600">25/05/2024</td>
-                        <td className="px-6 py-4"><span className="px-2.5 py-1 text-xs font-bold rounded-full bg-orange-100 text-orange-700">18 DIAS</span></td>
-                      </tr>
-                    </>
+                    <tr>
+                      <td colSpan={4} className="px-6 py-10 text-center text-sm text-gray-400">Sem contratos a expirar nos próximos 30 dias.</td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -546,28 +698,32 @@ export function Dashboard() {
 
       {/* 4. Alertas e Notificações */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-red-50 border border-red-100 p-5 rounded-2xl flex items-start gap-4 hover:shadow-lg hover:shadow-red-50 transition-all duration-300">
+        <div className="relative bg-red-50 border border-red-100 p-5 rounded-2xl flex items-start gap-4 hover:shadow-lg hover:shadow-red-50 transition-all duration-300">
           <div className="p-3 bg-red-100 rounded-xl shadow-sm"><AlertCircle className="w-6 h-6 text-red-600" /></div>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-bold text-red-900">Contratos expirando</p>
             <p className="text-xs text-red-700 mt-1">Existem 2 contratos que vencem nos próximos 30 dias. Ação necessária.</p>
           </div>
+          {menu('alerta-contratos', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }])}
         </div>
-        <div className="bg-amber-50 border border-amber-100 p-5 rounded-2xl flex items-start gap-4 hover:shadow-lg hover:shadow-amber-50 transition-all duration-300">
+        <div className="relative bg-amber-50 border border-amber-100 p-5 rounded-2xl flex items-start gap-4 hover:shadow-lg hover:shadow-amber-50 transition-all duration-300">
           <div className="p-3 bg-amber-100 rounded-xl shadow-sm"><Users className="w-6 h-6 text-amber-600" /></div>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-bold text-amber-900">Sem Técnico</p>
             <p className="text-xs text-amber-700 mt-1">3 intervenções abertas aguardam atribuição de técnico.</p>
           </div>
+          {menu('alerta-tecnicos', [atualizarItem, { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') }, { label: 'Ver técnicos', onClick: () => onNavigate?.('tecnicos') }])}
         </div>
-        <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex items-start gap-4 hover:shadow-lg hover:shadow-indigo-50 transition-all duration-300">
+        <div className="relative bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex items-start gap-4 hover:shadow-lg hover:shadow-indigo-50 transition-all duration-300">
           <div className="p-3 bg-indigo-100 rounded-xl shadow-sm"><TrendingUp className="w-6 h-6 text-indigo-600" /></div>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-bold text-indigo-900">Consumo de Horas</p>
             <p className="text-xs text-indigo-700 mt-1">Cliente Safir atingiu 85% do pacote de horas mensal.</p>
           </div>
+          {menu('alerta-horas', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }, { label: 'Ver horas', onClick: () => onNavigate?.('horas') }])}
         </div>
       </div>
     </div>
   );
 }
+

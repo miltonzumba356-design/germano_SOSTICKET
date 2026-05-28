@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts';
 import { relatoriosService } from '../services/api';
+import { formatarHoras } from '../utils/formatters';
 
 const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6b7280'];
 const RELATORIO_HORAS_VAZIO = {
@@ -191,8 +192,8 @@ export function Relatorios() {
           {tipoRelatorio === 'horas' && (
             <>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatCard icon={Clock} label="Total de Horas" value={`${dados?.total_horas || 0}h`} sub="Registos lançados" color="indigo" />
-                <StatCard icon={BarChart3} label="Média por Intervenção" value={`${dados?.media_horas_intervencao || 0}h`} sub="Tempo médio" color="emerald" />
+                <StatCard icon={Clock} label="Total de Horas" value={formatarHoras(dados?.total_horas)} sub="Registos lançados" color="indigo" />
+                <StatCard icon={BarChart3} label="Média por Intervenção" value={formatarHoras(dados?.media_horas_intervencao)} sub="Tempo médio" color="emerald" />
                 <StatCard icon={Users} label="Técnicos" value={horasTecnico.length} sub="Com horas registadas" color="amber" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

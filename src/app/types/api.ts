@@ -103,19 +103,26 @@ export interface Tecnico extends Usuario {
 export interface Contrato {
   id: string;
   numero?: string;
+  empresa_id?: string;
+  empresa?: string | Empresa;
+  empresa_detalhe?: Empresa;
   cliente_id?: string;
   cliente_nome?: string;
   cliente?: string | Cliente;
   tipo?: TipoPagamento;
   tipo_contrato?: TipoContrato;
   tipo_de_pagamento?: TipoPagamento;
+  descricao_contrato?: string;
   horas_contratadas?: number | string;
   horas_utilizadas?: number | string;
+  horas_disponiveis?: number | string;
   valor_total?: number | string;
+  valor_hora?: number | string;
   data_inicio: string;
   data_fim: string;
   status?: StatusContrato;
   observacoes?: string;
+  intervencoes?: Array<Record<string, unknown>>;
 }
 
 export interface Empresa {
@@ -157,6 +164,8 @@ export interface Intervencao {
   data_abertura?: string;
   data_conclusao?: string | null;
   anexos?: any[];
+  total_anexos?: number | string;
+  total_comentarios?: number | string;
   cliente?: string | Cliente;
   tecnico?: string | Tecnico;
   contrato?: string | Contrato;

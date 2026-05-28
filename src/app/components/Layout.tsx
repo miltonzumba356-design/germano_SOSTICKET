@@ -1,6 +1,8 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { adminMenu, MenuItem } from '../data/AdminMenu';
+import { notificacoesService } from '../services/api';
+import { Notificacao } from '../types/api';
 import {
   LayoutDashboard,
   Ticket,
@@ -28,6 +30,41 @@ import { WidgetCronometro } from './WidgetCronometro';
 export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
   const { usuario, logout } = useAuth();
   const [menuAberto, setMenuAberto] = useState(false);
+  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
+  const [painelNotificacoes, setPainelNotificacoes] = useState(false);
+  const [carregandoNotificacoes, setCarregandoNotificacoes] = useState(false);
+
+  const carregarNotificacoes = async () => {
+    if (!usuario) return;
+    setCarregandoNotificacoes(true);
+    try {
+      const response = await notificacoesService.listar({ limit: 10 });
+      const lista = Array.isArray(response)
+        ? response
+        : (response as any)?.results || (response as any)?.data || [];
+      setNotificacoes(Array.isArray(lista) ? lista : []);
+    } catch (error) {
+      console.error('Erro ao carregar notificacoes:', error);
+      setNotificacoes([]);
+    } finally {
+      setCarregandoNotificacoes(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarNotificacoes();
+  }, [usuario?.id]);
+
+  const notificacoesNaoLidas = notificacoes.filter((item) => !item.lida).length;
+
+  const marcarNotificacaoLida = async (id: string) => {
+    try {
+      await notificacoesService.marcarLida(id);
+      setNotificacoes((atuais) => atuais.map((item) => item.id === id ? { ...item, lida: true } : item));
+    } catch (error) {
+      console.error('Erro ao marcar notificacao como lida:', error);
+    }
+  };
 
   // Itens de menu baseados no perfil do usuário
   const getMenuItems = (): MenuItem[] => {
@@ -84,10 +121,67 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
             <h1 className="text-xl font-bold text-theme-primary">SOSTicket</h1>
           </div>
           <div className="flex items-center gap-4">
-            <button className="p-2 hover:bg-gray-100 rounded-lg relative">
+            <div className="relative">
+            <button
+              onClick={() => {
+                setPainelNotificacoes((aberto) => !aberto);
+                if (!painelNotificacoes) carregarNotificacoes();
+              }}
+              className="p-2 hover:bg-gray-100 rounded-lg relative"
+            >
               <Bell className="w-5 h-5 text-gray-600" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              {notificacoesNaoLidas > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">
+                  {notificacoesNaoLidas}
+                </span>
+              )}
             </button>
+            {painelNotificacoes && (
+              <div className="absolute right-0 top-11 w-[min(360px,calc(100vw-2rem))] bg-white border border-gray-100 rounded-xl shadow-xl z-[80] overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-black text-gray-900">Notificações</p>
+                    <p className="text-xs text-gray-500">{notificacoesNaoLidas} não lidas</p>
+                  </div>
+                  {notificacoesNaoLidas > 0 && (
+                    <button
+                      onClick={async () => {
+                        await notificacoesService.marcarTodasLidas();
+                        setNotificacoes((atuais) => atuais.map((item) => ({ ...item, lida: true })));
+                      }}
+                      className="text-xs font-bold text-theme-primary hover:text-theme-primary-hover"
+                    >
+                      Marcar todas
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-96 overflow-y-auto">
+                  {carregandoNotificacoes ? (
+                    <div className="p-6 text-sm text-gray-500 text-center">Carregando...</div>
+                  ) : notificacoes.length === 0 ? (
+                    <div className="p-6 text-sm text-gray-500 text-center">Sem notificações.</div>
+                  ) : notificacoes.map((notificacao) => (
+                    <button
+                      key={notificacao.id}
+                      onClick={() => marcarNotificacaoLida(notificacao.id)}
+                      className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 ${notificacao.lida ? 'bg-white' : 'bg-indigo-50/50'}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className={`mt-1 w-2 h-2 rounded-full ${notificacao.lida ? 'bg-gray-200' : 'bg-red-500'}`} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-gray-900 truncate">{notificacao.titulo}</p>
+                          <p className="text-xs text-gray-600 line-clamp-2">{notificacao.mensagem}</p>
+                          {notificacao.data_criacao && (
+                            <p className="text-[10px] text-gray-400 mt-1">{new Date(notificacao.data_criacao).toLocaleString('pt-PT')}</p>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            </div>
             <div className="hidden sm:flex items-center gap-3">
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">{usuario?.nome}</p>
@@ -149,5 +243,4 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
     </div>
   );
 }
-
 

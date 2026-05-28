@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, CheckCircle2, Mail, MapPin, Phone, Plus, Search, Server, X, AlertCircle, Loader2 } from 'lucide-react';
+import { Building2, CheckCircle2, Mail, MapPin, Phone, Plus, Search, Server, X, AlertCircle, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { Empresa } from '../types/api';
 import { empresasService } from '../services/api';
 
@@ -27,6 +27,9 @@ export function Empresas() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [exibirModal, setExibirModal] = useState(false);
+  const [exibirDetalhes, setExibirDetalhes] = useState(false);
+  const [empresaSelecionada, setEmpresaSelecionada] = useState<Empresa | null>(null);
+  const [empresaEdicao, setEmpresaEdicao] = useState<Empresa | null>(null);
   const [statusEnvio, setStatusEnvio] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [formData, setFormData] = useState(formInicial);
   const [listaPostos, setListaPostos] = useState([{ id: '', nome: '' }]);
@@ -75,14 +78,22 @@ export function Empresas() {
       }, {});
 
     try {
-      await empresasService.criar({
-        ...formData,
-        postos,
-      });
+      if (empresaEdicao) {
+        await empresasService.atualizacaoParcial(empresaEdicao.id, {
+          ...formData,
+          postos,
+        });
+      } else {
+        await empresasService.criar({
+          ...formData,
+          postos,
+        });
+      }
 
       setStatusEnvio('success');
       setTimeout(() => {
         setExibirModal(false);
+        setEmpresaEdicao(null);
         setFormData(formInicial);
         setListaPostos([{ id: '', nome: '' }]);
         setStatusEnvio('idle');
@@ -103,6 +114,7 @@ export function Empresas() {
             setStatusEnvio('success');
             setTimeout(() => {
               setExibirModal(false);
+              setEmpresaEdicao(null);
               setFormData(formInicial);
               setListaPostos([{ id: '', nome: '' }]);
               setStatusEnvio('idle');
@@ -117,6 +129,60 @@ export function Empresas() {
       setStatusEnvio('error');
       setTimeout(() => setStatusEnvio('idle'), 2500);
     }
+  };
+
+  const abrirDetalhes = async (empresa: Empresa) => {
+    setErro('');
+    try {
+      const detalhe = await empresasService.obterPorId(empresa.id);
+      setEmpresaSelecionada(detalhe);
+    } catch (error) {
+      console.error('Erro ao carregar detalhes da empresa:', error);
+      setEmpresaSelecionada(empresa);
+    }
+    setExibirDetalhes(true);
+  };
+
+  const abrirEdicao = (empresa: Empresa) => {
+    setEmpresaEdicao(empresa);
+    setFormData({
+      nome: empresa.nome || '',
+      Email_empresa: getEmpresaEmail(empresa),
+      telefone: empresa.telefone || '',
+      nif: empresa.nif || '',
+      endereco: empresa.endereco || '',
+      status: (empresa.status as 'activo' | 'inactivo') || 'activo',
+    });
+    const postos = empresa.postos && typeof empresa.postos === 'object'
+      ? Object.entries(empresa.postos).map(([chave, valor]: [string, any]) => ({
+          id: valor?.id || chave,
+          nome: valor?.nome || valor?.Nome || '',
+        }))
+      : [];
+    setListaPostos(postos.length ? postos : [{ id: '', nome: '' }]);
+    setExibirDetalhes(false);
+    setExibirModal(true);
+  };
+
+  const removerEmpresa = async (empresa: Empresa) => {
+    if (!window.confirm(`Deseja remover a empresa ${empresa.nome}?`)) return;
+    setErro('');
+    try {
+      await empresasService.deletar(empresa.id);
+      setExibirDetalhes(false);
+      setEmpresaSelecionada(null);
+      await carregarEmpresas();
+    } catch (error: any) {
+      console.error('Erro ao remover empresa:', error);
+      setErro(error?.message || 'Falha ao remover empresa.');
+    }
+  };
+
+  const fecharFormulario = () => {
+    setExibirModal(false);
+    setEmpresaEdicao(null);
+    setFormData(formInicial);
+    setListaPostos([{ id: '', nome: '' }]);
   };
 
   return (
@@ -164,7 +230,11 @@ export function Empresas() {
             <p className="text-gray-500 font-medium">Nenhuma empresa cadastrada.</p>
           </div>
         ) : empresas.map((empresa) => (
-          <div key={empresa.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm p-6">
+          <button
+            key={empresa.id}
+            onClick={() => abrirDetalhes(empresa)}
+            className="bg-white border border-gray-100 rounded-2xl shadow-sm p-6 text-left hover:border-indigo-200 hover:shadow-md transition-all"
+          >
             <div className="flex items-start justify-between gap-4 mb-5">
               <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                 <Building2 className="w-6 h-6" />
@@ -193,7 +263,7 @@ export function Empresas() {
                 <span>{empresa.endereco || 'Sem endereço'}</span>
               </div>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -201,8 +271,8 @@ export function Empresas() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-gray-900">Nova Empresa</h3>
-              <button onClick={() => setExibirModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <h3 className="text-xl font-bold text-gray-900">{empresaEdicao ? 'Editar Empresa' : 'Nova Empresa'}</h3>
+              <button onClick={fecharFormulario} className="p-2 hover:bg-gray-100 rounded-full">
                 <X className="w-5 h-5 text-gray-400" />
               </button>
             </div>
@@ -275,7 +345,7 @@ export function Empresas() {
               </div>
 
               <div className="p-6 border-t border-gray-100 flex justify-end gap-4 bg-gray-50/50 rounded-b-2xl">
-                <button type="button" onClick={() => setExibirModal(false)} className="px-6 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700">
+                <button type="button" onClick={fecharFormulario} className="px-6 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700">
                   Cancelar
                 </button>
                 <button
@@ -286,13 +356,80 @@ export function Empresas() {
                   }`}
                 >
                   {statusEnvio === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : statusEnvio === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                  <span>{statusEnvio === 'success' ? 'Cadastrada!' : 'Salvar Empresa'}</span>
+                  <span>{statusEnvio === 'success' ? 'Salva!' : 'Salvar Empresa'}</span>
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {exibirDetalhes && empresaSelecionada && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden">
+            <div className="p-6 bg-indigo-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-xl">
+                  <Building2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-indigo-100 uppercase tracking-widest">Detalhes da empresa</p>
+                  <h3 className="text-2xl font-black">{empresaSelecionada.nome}</h3>
+                </div>
+              </div>
+              <button onClick={() => setExibirDetalhes(false)} className="p-2 hover:bg-white/20 rounded-full">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Info label="NIF" value={empresaSelecionada.nif || 'N/A'} />
+                <Info label="Status" value={empresaSelecionada.status === 'inactivo' ? 'Inativa' : 'Ativa'} />
+                <Info label="E-mail" value={getEmpresaEmail(empresaSelecionada) || 'Sem e-mail'} />
+                <Info label="Telefone" value={empresaSelecionada.telefone || 'Sem telefone'} />
+                <div className="md:col-span-2">
+                  <Info label="Endereço" value={empresaSelecionada.endereco || 'Sem endereço'} />
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Postos</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {empresaSelecionada.postos && Object.keys(empresaSelecionada.postos).length ? (
+                    Object.entries(empresaSelecionada.postos).map(([chave, valor]: [string, any]) => (
+                      <div key={chave} className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                        <p className="text-xs font-black text-gray-400 uppercase">{valor?.id || chave}</p>
+                        <p className="text-sm font-bold text-gray-800">{valor?.nome || valor?.Nome || 'Posto sem nome'}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500">Sem postos cadastrados.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3">
+              <button onClick={() => removerEmpresa(empresaSelecionada)} className="px-5 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 rounded-xl flex items-center gap-2">
+                <Trash2 className="w-4 h-4" /> Remover
+              </button>
+              <button onClick={() => abrirEdicao(empresaSelecionada)} className="px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl flex items-center gap-2">
+                <Pencil className="w-4 h-4" /> Editar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{label}</p>
+      <p className="text-sm font-bold text-gray-900">{value}</p>
     </div>
   );
 }

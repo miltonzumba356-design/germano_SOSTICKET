@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { cronometroService } from '../services/api';
-import { CronometroState, SessaoCronometro } from '../types/api';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { intervencoesService } from '../services/api';
+import { CronometroState } from '../types/api';
 import { useAuth } from './AuthContext';
 
 interface CronometroContextType {
@@ -14,6 +14,7 @@ interface CronometroContextType {
   limparLocal: (id: string) => void;
 }
 
+const STORAGE_KEY = 'cronometros_ativos';
 const CronometroContext = createContext<CronometroContextType | undefined>(undefined);
 
 export function CronometroProvider({ children }: { children: React.ReactNode }) {
@@ -21,133 +22,116 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
   const [cronometros, setCronometros] = useState<CronometroState[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  // Carregar sessões iniciais do backend e localStorage
   useEffect(() => {
     if (usuario?.perfil === 'tecnico') {
       carregarSessoes();
     } else {
+      setCronometros([]);
       setCarregando(false);
     }
   }, [usuario]);
 
-  const carregarSessoes = async () => {
+  const carregarSessoes = () => {
     try {
-      const sessoes = await cronometroService.listar();
-      const localSessoes = JSON.parse(localStorage.getItem('cronometros_ativos') || '[]');
-      
-      // Merge backend and local data (backend has priority for state, local for recent calculation)
-      const merged: CronometroState[] = sessoes.map(s => {
-        const local = localSessoes.find((l: any) => l.id === s.id);
-        return {
-          ...s,
-          tempoAtual: local ? local.tempoAtual : s.tempo_acumulado
-        };
-      });
-
-      setCronometros(merged);
+      const local = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      setCronometros(Array.isArray(local) ? local : []);
     } catch (error) {
-      console.error('Erro ao carregar cronómetros:', error);
-      // Se falhar API, tenta usar local
-      const local = JSON.parse(localStorage.getItem('cronometros_ativos') || '[]');
-      setCronometros(local);
+      console.error('Erro ao carregar cronometros locais:', error);
+      setCronometros([]);
     } finally {
       setCarregando(false);
     }
   };
 
-  // Persistência local
   useEffect(() => {
     if (cronometros.length > 0) {
-      localStorage.setItem('cronometros_ativos', JSON.stringify(cronometros));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cronometros));
     } else {
-      localStorage.removeItem('cronometros_ativos');
+      localStorage.removeItem(STORAGE_KEY);
     }
   }, [cronometros]);
 
-  // Atualizador de segundos em tempo real
   useEffect(() => {
     if (cronometros.length === 0) return;
 
     const timer = setInterval(() => {
       setCronometros(prev => prev.map(c => {
-        if (c.status === 'ativo') {
-          const inicio = new Date(c.hora_inicio).getTime();
-          const agora = new Date().getTime();
-          
-          // Calcula pausas
-          let duracaoPausas = 0;
-          c.pausas?.forEach(p => {
-            if (p.fim) {
-              duracaoPausas += p.duracao;
-            } else {
-              const pausaInicio = new Date(p.inicio).getTime();
-              duracaoPausas += (agora - pausaInicio) / 1000;
-            }
-          });
+        if (c.status !== 'ativo') return c;
 
-          const decorrido = (agora - inicio) / 1000 - duracaoPausas;
-          const novoTempo = Math.max(0, Math.floor(decorrido));
-          
-          // Só atualiza se o tempo mudou para evitar renders idênticos
-          if (novoTempo === c.tempoAtual) return c;
-          return { ...c, tempoAtual: novoTempo };
-        }
-        return c;
+        const inicio = new Date(c.hora_inicio).getTime();
+        const agora = Date.now();
+        const novoTempo = Math.max(0, Math.floor((agora - inicio) / 1000));
+
+        if (novoTempo === c.tempoAtual) return c;
+        return { ...c, tempoAtual: novoTempo, tempo_acumulado: novoTempo };
       }));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [cronometros.length > 0]); // Só reinicia se a lista passar de vazia para populada
-
-  // Sincronização periódica (30s)
-  useEffect(() => {
-    if (cronometros.length === 0) return;
-
-    const syncTimer = setInterval(() => {
-      // Usamos uma referência interna ou o estado atualizado
-      // Para evitar depender de 'cronometros' no array de dependências, 
-      // podemos ler do estado atual no momento do tick.
-      setCronometros(atual => {
-        atual.forEach(c => {
-          if (c.status === 'ativo' && c.tempoAtual) {
-            cronometroService.sincronizar(c.id, c.tempoAtual).catch(err => {
-              console.warn('Falha na sincronização do cronómetro:', err);
-            });
-          }
-        });
-        return atual;
-      });
-    }, 30000);
-
-    return () => clearInterval(syncTimer);
   }, [cronometros.length > 0]);
 
   const iniciar = async (intervencaoId: string, tipo: 'presencial' | 'remoto') => {
     if (cronometros.length >= 3) {
-      throw new Error('Limite de 3 cronómetros atingido.');
+      throw new Error('Limite de 3 cronometros atingido.');
     }
-    const novaSessao = await cronometroService.iniciar({ intervencao_id: intervencaoId, tipo });
-    setCronometros(prev => [...prev, { ...novaSessao, tempoAtual: 0 }]);
+
+    await intervencoesService.atualizacaoParcial(intervencaoId, {
+      status: 'em_andamento',
+    });
+    const intervencao = await intervencoesService.obterPorId(intervencaoId);
+
+    const novaSessao: CronometroState = {
+      id: `local-${intervencaoId}-${Date.now()}`,
+      intervencao_id: intervencaoId,
+      intervencao_numero: intervencao.numero,
+      intervencao_titulo: intervencao.titulo,
+      cliente_nome: intervencao.cliente_nome,
+      tipo,
+      status: 'ativo',
+      hora_inicio: new Date().toISOString(),
+      tempo_acumulado: 0,
+      pausas: [],
+      tempoAtual: 0,
+    };
+
+    setCronometros(prev => [...prev, novaSessao]);
   };
 
   const pausar = async (id: string) => {
-    const sessao = await cronometroService.pausar(id);
-    setCronometros(prev => prev.map(c => c.id === id ? { ...c, ...sessao } : c));
+    setCronometros(prev => prev.map(c =>
+      c.id === id ? { ...c, status: 'pausado', tempo_acumulado: c.tempoAtual || 0 } : c
+    ));
   };
 
   const retomar = async (id: string) => {
-    const sessao = await cronometroService.retomar(id);
-    setCronometros(prev => prev.map(c => c.id === id ? { ...c, ...sessao } : c));
+    setCronometros(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      const tempoAtual = c.tempoAtual || c.tempo_acumulado || 0;
+      return {
+        ...c,
+        status: 'ativo',
+        hora_inicio: new Date(Date.now() - tempoAtual * 1000).toISOString(),
+        tempo_acumulado: tempoAtual,
+        pausas: [],
+      };
+    }));
   };
 
-  const parar = async (id: string, descricao: string, horas: number) => {
-    await cronometroService.parar(id, { descricao, horas });
+  const parar = async (id: string, _descricao?: string, horas?: number) => {
+    const sessao = cronometros.find(c => c.id === id);
+    if (sessao?.intervencao_id) {
+      const horasCalculadas = Number(horas ?? ((sessao.tempoAtual || sessao.tempo_acumulado || 0) / 3600));
+      await intervencoesService.atualizacaoParcial(sessao.intervencao_id, {
+        status: 'resolvido',
+        horas_trabalhadas: Number.isFinite(horasCalculadas) ? horasCalculadas.toFixed(2) : '0.00',
+        data_conclusao: new Date().toISOString(),
+      });
+    }
     setCronometros(prev => prev.filter(c => c.id !== id));
   };
 
   const recuperarLocal = () => {
-    const local = JSON.parse(localStorage.getItem('cronometros_ativos') || '[]');
-    setCronometros(local);
+    carregarSessoes();
   };
 
   const limparLocal = (id: string) => {
@@ -155,12 +139,12 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
   };
 
   return (
-    <CronometroContext.Provider value={{ 
-      cronometros, 
-      carregando, 
-      iniciar, 
-      pausar, 
-      retomar, 
+    <CronometroContext.Provider value={{
+      cronometros,
+      carregando,
+      iniciar,
+      pausar,
+      retomar,
       parar,
       recuperarLocal,
       limparLocal

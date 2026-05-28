@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Contrato</title>
+
+    <style>
+        @page {
+            size: A4;
+            margin: 35px;
+        }
+
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            color: #1e293b;
+            font-size: 13px;
+            line-height: 1.7;
+            background: #f8fafc;
+            position: relative;
+        }
+
+        .watermark {
+            position: fixed;
+            top: 20%;
+            left: 12%;
+            width: 75%;
+            opacity: 0.04;
+            z-index: -1;
+        }
+
+        .document {
+            background: #ffffff;
+            padding: 45px;
+            border-radius: 18px;
+        }
+
+        /* HEADER */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-bottom: 25px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .logo-area h1 {
+            margin: 0;
+            color: #2563eb;
+            font-size: 30px;
+            font-weight: 700;
+        }
+
+        .logo-area p {
+            margin-top: 6px;
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        .contacts {
+            
+            margin: 20px; 
+            font-size: 12px;
+            color: #475569;
+        }
+
+        .contacts strong {
+            color: #0f172a;
+        }
+
+        .document-info {
+            margin-top: 10px;
+            text-align: right;
+        }
+
+        .document-info h2 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 20px;
+        }
+
+        .document-info p {
+            margin-top: 5px;
+            color: #64748b;
+        }
+
+        /* SECTION */
+        .section {
+            margin-bottom: 35px;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #2563eb;
+            margin-bottom: 18px;
+            padding-left: 12px;
+            border-left: 4px solid #2563eb;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .card {
+            background: #f8fafc;
+            padding: 18px;
+            border-radius: 14px;
+        }
+
+        .label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .value {
+            font-size: 14px;
+            font-weight: 600;
+            color: #0f172a;
+            margin-top: 5px;
+        }
+
+        .observacoes {
+            background: #f8fafc;
+            padding: 18px;
+            border-radius: 14px;
+        }
+
+        .status {
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            font-weight: 700;
+            font-size: 11px;
+        }
+
+        .assinaturas {
+            margin-top: 70px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .assinatura {
+            width: 240px;
+            text-align: center;
+        }
+
+        .linha {
+            border-top: 1px solid #94a3b8;
+            padding-top: 8px;
+            color: #475569;
+        }
+
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 11px;
+        }
+    </style>
+</head>
+
+<body>
+
+<img class="watermark"
+     src="https://upload.wikimedia.org/wikipedia/commons/a/a7/React-icon.svg">
+
+<div class="document">
+
+    <!-- HEADER -->
+    <div class="header">
+
+        <div class="logo-area">
+            <h1>SOSTicket</h1>
+            <p>Assistência Técnica e Consultoria</p>
+
+            <!-- CONTACTOS -->
+            <div class="contacts">
+                <div><strong>Tel:</strong> +244 9XX XXX XXX</div>
+                <div><strong>Email:</strong> contacto@empresa.com</div>
+                <div><strong>Morada:</strong> Luanda, Angola</div>
+            </div>
+        </div>
+
+        <div class="document-info">
+            <h2>Relatório de Contrato</h2>
+            <p>{{ contrato.id }}</p>
+        </div>
+
+    </div>
+
+    <!-- DADOS -->
+    <div class="section">
+        <div class="section-title">Dados do Contrato</div>
+
+        <div class="info-grid">
+
+            <div class="card">
+                <div class="label">Cliente</div>
+                <div class="value">{{ contrato.Empresa.nome }}</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Tipo</div>
+                <div class="value">{{ contrato.tipo_contrato }}</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Pagamento</div>
+                <div class="value">{{ contrato.tipo_de_pagamento }}</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Estado</div>
+                <div class="value">
+                    <span class="status">{{ contrato.status }}</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="label">Horas Contratadas</div>
+                <div class="value">{{ contrato.horas_contratadas }}</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Horas Utilizadas</div>
+                <div class="value">{{ contrato.horas_utilizadas }}</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Valor Hora</div>
+                <div class="value">{{ contrato.valor_hora }} Kz</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Valor Total</div>
+                <div class="value">{{ contrato.valor_total }} Kz</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Início</div>
+                <div class="value">{{ contrato.data_inicio }}</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Fim</div>
+                <div class="value">{{ contrato.data_fim }}</div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- OBS -->
+    <div class="section">
+        <div class="section-title">Observações</div>
+        <div class="observacoes">
+            {{ contrato.observacoes }}
+        </div>
+    </div>
+
+    <!-- ASSINATURAS -->
+    <div class="assinaturas">
+
+        <div class="assinatura">
+            <div class="linha">Responsável Técnico</div>
+        </div>
+
+        <div class="assinatura">
+            <div class="linha">Cliente</div>
+        </div>
+
+    </div>
+
+    <div class="footer">
+        Documento gerado automaticamente pelo sistema 
+    </div>
+
+</div>
+
+</body>
+</html>

@@ -36,6 +36,15 @@ import {
   relatoriosService 
 } from '../services/api';
 import { HoraTrabalho, Intervencao, CronometroState } from '../types/api';
+import { formatarHoras } from '../utils/formatters';
+
+function normalizarLista<T>(response: any): T[] {
+  const lista = Array.isArray(response)
+    ? response
+    : response?.results || response?.data?.results || response?.data || [];
+
+  return Array.isArray(lista) ? lista : [];
+}
 
 export function Horas() {
   const { usuario } = useAuth();
@@ -77,25 +86,30 @@ export function Horas() {
     carregarDadosIniciais();
   }, [tab, pagina, busca, filtroTipo]);
 
+  useEffect(() => {
+    if (tab !== 'cronometro' || novaSessao.intervencao_id) return;
+    const intervencaoId = localStorage.getItem('cronometro_intervencao_id');
+    if (!intervencaoId) return;
+    if (intervencoes.some((intervencao) => intervencao.id === intervencaoId)) {
+      setNovaSessao((prev) => ({ ...prev, intervencao_id: intervencaoId }));
+      localStorage.removeItem('cronometro_intervencao_id');
+    }
+  }, [tab, intervencoes, novaSessao.intervencao_id]);
+
   const carregarDadosIniciais = async () => {
     setCarregando(true);
     try {
       if (tab === 'cronometro') {
         const [intervs, resumo] = await Promise.all([
-          intervencoesService.listar({ tecnico_id: isTecnico ? usuario?.id : undefined }),
-          relatoriosService.horas()
+          intervencoesService.listar({ limit: 100 }),
+          relatoriosService.horas().catch(() => ({ hoje: 0, semana: 0, mes: 0 }))
         ]);
         
-        const results = Array.isArray(intervs) ? intervs : (intervs as any)?.data || (intervs as any)?.results || [];
+        const results = normalizarLista<Intervencao>(intervs);
         
-        // Se não houver intervenções atribuídas, talvez queiramos mostrar as que estão "abertas"
-        if (results.length === 0 && isTecnico) {
-          const allOpen = await intervencoesService.listar({ status: 'aberto' });
-          const extraResults = Array.isArray(allOpen) ? allOpen : (allOpen as any)?.data || (allOpen as any)?.results || [];
-          setIntervencoes(extraResults);
-        } else {
-          setIntervencoes(results);
-        }
+        setIntervencoes(results.filter((intervencao: Intervencao) =>
+          !['resolvido', 'fechado', 'concluido'].includes(intervencao.status || '')
+        ));
         setResumoTecnico(resumo);
       } else if (tab === 'minhas') {
         const response = await horasService.listar({
@@ -126,6 +140,7 @@ export function Horas() {
       await iniciar(novaSessao.intervencao_id, novaSessao.tipo);
       setNovaSessao({ intervencao_id: '', tipo: 'presencial' });
       setStatus('idle');
+      await carregarDadosIniciais();
     } catch (err: any) {
       setErro(err.message || 'Erro ao iniciar cronómetro.');
       setStatus('error');
@@ -160,6 +175,19 @@ export function Horas() {
   };
 
   // Funções Auxiliares
+  const handleSalvarCronometro = async (cronometro: CronometroState) => {
+    try {
+      setStatus('loading');
+      setErro('');
+      await parar(cronometro.id, 'Cronometro finalizado pelo tecnico.', arredondarHoras(cronometro.tempoAtual || 0));
+      setStatus('idle');
+      await carregarDadosIniciais();
+    } catch (err: any) {
+      setErro(err.message || 'Erro ao salvar o cronometro.');
+      setStatus('error');
+    }
+  };
+
   const formatarTempo = (segundos: number) => {
     const h = Math.floor(segundos / 3600);
     const m = Math.floor((segundos % 3600) / 60);
@@ -171,6 +199,9 @@ export function Horas() {
     const horas = segundos / 3600;
     return Math.round(horas * 4) / 4; // Arredonda para 0.25
   };
+
+  const intervencoesComCronometro = new Set(cronometros.map((cronometro) => cronometro.intervencao_id));
+  const intervencoesDisponiveis = intervencoes.filter((intervencao) => !intervencoesComCronometro.has(intervencao.id));
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -206,6 +237,13 @@ export function Horas() {
       </div>
 
       <hr className="border-gray-100" />
+
+      {erro && (
+        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-700">
+          <AlertCircle className="w-5 h-5" />
+          <span className="text-sm font-bold">{erro}</span>
+        </div>
+      )}
 
       {/* Conteúdo das Abas */}
       <div className="min-h-[600px]">
@@ -279,11 +317,13 @@ export function Horas() {
                                         <Play className="w-6 h-6 fill-current" />
                                       </button>
                                     )}
-                                    <button 
-                                      onClick={() => abrirModalParar(c)}
-                                      className="p-4 bg-red-100 text-red-600 rounded-2xl hover:bg-red-200 transition-colors"
+                                    <button
+                                      onClick={() => handleSalvarCronometro(c)}
+                                      disabled={status === 'loading'}
+                                      className="px-4 py-4 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-colors font-black text-xs uppercase tracking-widest disabled:opacity-50 flex items-center gap-2"
                                     >
-                                      <Square className="w-6 h-6 fill-current" />
+                                      <Check className="w-5 h-5" />
+                                      Salvar
                                     </button>
                                  </div>
                               </div>
@@ -306,7 +346,7 @@ export function Horas() {
                         className="w-full px-5 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
                       >
                         <option value="">Selecione a intervenção...</option>
-                        {intervencoes.map(i => (
+                        {intervencoesDisponiveis.map(i => (
                           <option key={i.id} value={i.id}>#{i.numero} - {i.titulo}</option>
                         ))}
                       </select>
@@ -346,8 +386,8 @@ export function Horas() {
             {/* Sidebar: Resumo do Dia */}
             <div className="space-y-8">
                <div className="grid grid-cols-1 gap-6">
-                  <StatCard icon={Clock} label="Hoje" value={`${resumoTecnico.hoje}h`} sub="Trabalho acumulado" color="emerald" />
-                  <StatCard icon={TrendingUp} label="Semana" value={`${resumoTecnico.semana}h`} sub="Total desta semana" color="blue" />
+                  <StatCard icon={Clock} label="Hoje" value={formatarHoras(resumoTecnico.hoje)} sub="Trabalho acumulado" color="emerald" />
+                  <StatCard icon={TrendingUp} label="Semana" value={formatarHoras(resumoTecnico.semana)} sub="Total desta semana" color="blue" />
                </div>
 
                <div className="bg-emerald-900 p-8 rounded-[32px] text-white space-y-6 shadow-2xl">
@@ -399,7 +439,7 @@ export function Horas() {
                                   <div className="text-sm font-black text-emerald-600">#{h.intervencao.split('-')[0].toUpperCase()}</div>
                                </td>
                                <td className="px-8 py-6">
-                                  <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-black">{h.horas}h</span>
+                                  <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-black">{formatarHoras(h.horas)}</span>
                                </td>
                                <td className="px-8 py-6 text-xs text-gray-500 font-medium max-w-xs truncate">{h.descricao}</td>
                                <td className="px-8 py-6 text-right">
@@ -437,7 +477,7 @@ export function Horas() {
                     </div>
                     <div className="text-center space-y-1 border-l border-gray-200">
                        <p className="text-[10px] font-black text-emerald-600 uppercase">Sugestão (Arred.)</p>
-                       <p className="text-2xl font-black text-emerald-600">{arredondarHoras(modalParar.cronometro.tempoAtual || 0)}h</p>
+                       <p className="text-2xl font-black text-emerald-600">{formatarHoras(arredondarHoras(modalParar.cronometro.tempoAtual || 0))}</p>
                     </div>
                  </div>
 

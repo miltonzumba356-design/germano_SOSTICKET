@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Intervencao } from '../types/api';
 import type { Cliente } from '../types/api';
 import { intervencoesService, contratosService, clientesService, tecnicosService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { formatarHoras } from '../utils/formatters';
 import { 
   Search, 
   Plus, 
@@ -32,7 +33,20 @@ function getEmpresaNome(empresa: Cliente['empresa']) {
   return String(empresa.nome || empresa.Email_empresa || 'Empresa');
 }
 
-export function Intervencoes() {
+function getEmpresaId(empresa: Cliente['empresa'] | unknown) {
+  if (!empresa || typeof empresa === 'string') return undefined;
+  return (empresa as { id?: string }).id;
+}
+
+function totalComentarios(intervencao: Intervencao) {
+  return Number(intervencao.total_comentarios ?? intervencao.comentarios?.length ?? intervencao.comentario?.length ?? 0);
+}
+
+function totalAnexos(intervencao: Intervencao) {
+  return Number(intervencao.total_anexos ?? intervencao.anexos?.length ?? 0);
+}
+
+export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => void }) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin';
   const isTecnico = usuario?.perfil === 'tecnico';
@@ -69,6 +83,15 @@ export function Intervencoes() {
   const [exibirModalStatus, setExibirModalStatus] = useState(false);
   const [intervencaoStatus, setIntervencaoStatus] = useState<Intervencao | null>(null);
   const [salvandoStatus, setSalvandoStatus] = useState(false);
+  const [menuAcoesAberto, setMenuAcoesAberto] = useState<string | null>(null);
+  const [exibirModalEditar, setExibirModalEditar] = useState(false);
+  const [intervencaoEditar, setIntervencaoEditar] = useState<Intervencao | null>(null);
+  const [formEditar, setFormEditar] = useState({
+    titulo: '',
+    descricao: '',
+    prioridade: 'media' as any,
+  });
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
   const [formStatus, setFormStatus] = useState({
     status: 'em_andamento',
     actuacao_tipo: 'remoto',
@@ -113,11 +136,10 @@ export function Intervencoes() {
   const carregarContratos = async () => {
     if (!isCliente && !isAdmin) return;
     try {
-      const clienteFiltro = isAdmin ? novoTicket.cliente_id || undefined : usuario?.id;
       const resp = await contratosService.listar({ 
         status: 'activo', 
         limit: 50,
-        cliente_id: clienteFiltro
+        cliente_id: isAdmin ? novoTicket.cliente_id || undefined : usuario?.id
       });
       const lista = Array.isArray(resp) 
         ? resp 
@@ -306,9 +328,9 @@ export function Intervencoes() {
 
   const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clienteSelecionado = isAdmin ? novoTicket.cliente_id : usuario?.id;
+    const clienteSelecionado = isAdmin ? novoTicket.cliente_id : undefined;
 
-    if (!clienteSelecionado) {
+    if (isAdmin && !clienteSelecionado) {
       setErro('Selecione um cliente para vincular a intervenção.');
       return;
     }
@@ -321,16 +343,16 @@ export function Intervencoes() {
       const contratoSelecionado = novoTicket.contrato_id
         ? contratos.find(c => c.id === novoTicket.contrato_id)
         : null;
-      const clienteIdFinal = clienteSelecionado || contratoSelecionado?.cliente_id;
+      const clienteIdFinal = isAdmin ? clienteSelecionado || contratoSelecionado?.cliente_id : undefined;
 
-      if (!clienteIdFinal) {
+      if (isAdmin && !clienteIdFinal) {
         throw new Error('Não foi possível identificar o cliente do contrato.');
       }
 
       await intervencoesService.criar({
         titulo: novoTicket.titulo.trim(),
         descricao: novoTicket.descricao.trim(),
-        cliente_id: clienteIdFinal,
+        ...(clienteIdFinal ? { cliente_id: clienteIdFinal } : {}),
         contrato_id: novoTicket.contrato_id || undefined,
         prioridade: novoTicket.prioridade,
         tipo_pagamento: contratoSelecionado?.tipo_de_pagamento || 'horas',
@@ -390,6 +412,90 @@ export function Intervencoes() {
       setIntervencaoDetalhe(data);
     } catch (err) {
       console.error('Erro ao enviar comentário:', err);
+    }
+  };
+
+  const podeClienteAlterar = (intervencao: Intervencao) =>
+    isCliente && intervencao.status === 'aberto';
+
+  const abrirEditarCliente = (intervencao: Intervencao) => {
+    if (!podeClienteAlterar(intervencao)) {
+      setErro('Clientes só podem editar intervenções com estado aberto.');
+      setMenuAcoesAberto(null);
+      return;
+    }
+
+    setIntervencaoEditar(intervencao);
+    setFormEditar({
+      titulo: intervencao.titulo || '',
+      descricao: intervencao.descricao || '',
+      prioridade: intervencao.prioridade || 'media',
+    });
+    setMenuAcoesAberto(null);
+    setExibirModalEditar(true);
+  };
+
+  const handleEditarCliente = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!intervencaoEditar) return;
+
+    if (!podeClienteAlterar(intervencaoEditar)) {
+      setErro('Clientes só podem editar intervenções com estado aberto.');
+      return;
+    }
+
+    setSalvandoEdicao(true);
+    setErro('');
+    try {
+      await intervencoesService.atualizacaoParcial(intervencaoEditar.id, {
+        titulo: formEditar.titulo.trim(),
+        descricao: formEditar.descricao.trim(),
+        prioridade: formEditar.prioridade,
+      });
+      setExibirModalEditar(false);
+      setIntervencaoEditar(null);
+      await carregarIntervencoes();
+    } catch (err: any) {
+      console.error('Erro ao editar intervenção:', err);
+      setErro(err.message || 'Falha ao editar a intervenção.');
+    } finally {
+      setSalvandoEdicao(false);
+    }
+  };
+
+  const handleDeletarIntervencao = async (intervencao: Intervencao) => {
+    if (isCliente && !podeClienteAlterar(intervencao)) {
+      setErro('Clientes só podem remover intervenções com estado aberto.');
+      setMenuAcoesAberto(null);
+      return;
+    }
+
+    if (!window.confirm(`Deseja remover a intervenção ${intervencao.numero || intervencao.titulo}?`)) return;
+    setErro('');
+    try {
+      await intervencoesService.deletar(intervencao.id);
+      setMenuAcoesAberto(null);
+      await carregarIntervencoes();
+    } catch (err: any) {
+      console.error('Erro ao remover intervenção:', err);
+      setErro(err.message || 'Falha ao remover a intervenção.');
+    }
+  };
+
+  const handleResolverIntervencao = async (intervencao: Intervencao) => {
+    setErro('');
+    try {
+      await intervencoesService.atualizacaoParcial(intervencao.id, {
+        status: 'resolvido',
+      });
+      setMenuAcoesAberto(null);
+      await carregarIntervencoes();
+      if (exibirModalDetalhes && intervencaoDetalhe?.id === intervencao.id) {
+        setIntervencaoDetalhe(await intervencoesService.obterPorId(intervencao.id));
+      }
+    } catch (err: any) {
+      console.error('Erro ao resolver intervenção:', err);
+      setErro(err.message || 'Falha ao resolver a intervenção.');
     }
   };
 
@@ -673,7 +779,7 @@ export function Intervencoes() {
             <p className="text-gray-500 text-sm font-medium">Nenhuma intervenção encontrada com estes filtros.</p>
           </div>
         ) : intervencoes.map((intervencao) => (
-          <div key={intervencao.id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:border-indigo-200 transition-all group overflow-hidden">
+          <div key={intervencao.id} className="relative bg-white rounded-xl border border-gray-100 shadow-sm hover:border-indigo-200 transition-all group overflow-visible">
             <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-3">
@@ -708,11 +814,11 @@ export function Intervencoes() {
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1 text-gray-400" title="Comentários">
                     <MessageSquare className="w-4 h-4" />
-                    <span className="text-xs font-bold">{intervencao.total_comentarios || 0}</span>
+                    <span className="text-xs font-bold">{totalComentarios(intervencao)}</span>
                   </div>
                   <div className="flex items-center gap-1 text-gray-400" title="Anexos">
                     <Paperclip className="w-4 h-4" />
-                    <span className="text-xs font-bold">{intervencao.total_anexos || 0}</span>
+                    <span className="text-xs font-bold">{totalAnexos(intervencao)}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -728,27 +834,6 @@ export function Intervencoes() {
                        <ShieldCheck className="w-4 h-4" />
                      </button>
                    )}
-                   {usuario?.perfil === 'tecnico' && (
-                     <button
-                       onClick={(e) => {
-                         e.stopPropagation();
-                         abrirModalStatus(intervencao);
-                       }}
-                       className="px-4 py-2 text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
-                     >
-                       Resolver
-                     </button>
-                   )}
-                   {usuario?.perfil === 'tecnico' && (
-                     <>
-                       <button className="px-4 py-2 text-xs font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors">
-                         Atualizar Status
-                       </button>
-                       <button className="px-4 py-2 text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors">
-                         Lançar Horas
-                       </button>
-                     </>
-                   )}
                    <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -760,9 +845,107 @@ export function Intervencoes() {
                      {carregandoDetalhe && <Loader2 className="w-3 h-3 animate-spin" />}
                      Detalhes
                    </button>
-                  <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
-                    <MoreVertical className="w-5 h-5" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuAcoesAberto((atual) => atual === intervencao.id ? null : intervencao.id);
+                      }}
+                      className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
+                    {menuAcoesAberto === intervencao.id && (
+                      <div className="absolute right-0 top-10 w-56 bg-white border border-gray-100 rounded-xl shadow-2xl z-[90] overflow-hidden">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuAcoesAberto(null);
+                            handleVerDetalhes(intervencao.id);
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-sm font-bold text-gray-700 hover:bg-gray-50"
+                        >
+                          Ver detalhes
+                        </button>
+                        {!isCliente && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMenuAcoesAberto(null);
+                              abrirModalStatus(intervencao);
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm font-bold text-gray-700 hover:bg-gray-50"
+                          >
+                            Atualizar status
+                          </button>
+                        )}
+                        {isTecnico && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              localStorage.setItem('cronometro_intervencao_id', intervencao.id);
+                              setMenuAcoesAberto(null);
+                              onNavigate?.('horas');
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm font-bold text-gray-700 hover:bg-gray-50"
+                          >
+                            Lançar horas
+                          </button>
+                        )}
+                        {isTecnico && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleResolverIntervencao(intervencao);
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm font-bold text-emerald-600 hover:bg-emerald-50"
+                          >
+                            Resolver
+                          </button>
+                        )}
+                        {isCliente && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              abrirEditarCliente(intervencao);
+                            }}
+                            disabled={!podeClienteAlterar(intervencao)}
+                            className={`w-full px-4 py-2.5 text-left text-sm font-bold hover:bg-gray-50 ${
+                              podeClienteAlterar(intervencao) ? 'text-gray-700' : 'text-gray-300 cursor-not-allowed'
+                            }`}
+                          >
+                            Editar
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMenuAcoesAberto(null);
+                              abrirModalAtribuir(intervencao);
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm font-bold text-gray-700 hover:bg-gray-50"
+                          >
+                            Atribuir técnico
+                          </button>
+                        )}
+                        {(isCliente || isAdmin) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletarIntervencao(intervencao);
+                            }}
+                            disabled={isCliente && !podeClienteAlterar(intervencao)}
+                            className={`w-full px-4 py-2.5 text-left text-sm font-bold hover:bg-red-50 ${
+                              isCliente && !podeClienteAlterar(intervencao) ? 'text-gray-300 cursor-not-allowed' : 'text-red-600'
+                            }`}
+                          >
+                            Remover
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -893,7 +1076,7 @@ export function Intervencoes() {
                       <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Métricas</h4>
                       <div className="flex items-center gap-3 text-sm font-bold text-gray-700">
                         <Clock className="w-4 h-4 text-theme-primary" />
-                        <span>{intervencaoDetalhe.horas_trabalhadas || 0}h registradas</span>
+                        <span>{formatarHoras(intervencaoDetalhe.horas_trabalhadas)} registradas</span>
                       </div>
                     </div>
                   </div>
@@ -946,6 +1129,79 @@ export function Intervencoes() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {exibirModalEditar && intervencaoEditar && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-theme-primary text-white">
+              <div>
+                <h3 className="text-xl font-black">Editar Intervenção</h3>
+                <p className="text-xs font-bold text-white/80 uppercase tracking-widest">
+                  #{intervencaoEditar.numero || intervencaoEditar.id.substring(0, 8)}
+                </p>
+              </div>
+              <button onClick={() => setExibirModalEditar(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditarCliente} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Título *</label>
+                <input
+                  required
+                  value={formEditar.titulo}
+                  onChange={(e) => setFormEditar((prev) => ({ ...prev, titulo: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Descrição *</label>
+                <textarea
+                  required
+                  rows={5}
+                  value={formEditar.descricao}
+                  onChange={(e) => setFormEditar((prev) => ({ ...prev, descricao: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium resize-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Prioridade</label>
+                <select
+                  value={formEditar.prioridade}
+                  onChange={(e) => setFormEditar((prev) => ({ ...prev, prioridade: e.target.value as any }))}
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                >
+                  <option value="baixa">Baixa</option>
+                  <option value="media">Média</option>
+                  <option value="alta">Alta</option>
+                  <option value="urgente">Urgente</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setExibirModalEditar(false)}
+                  className="flex-1 py-3 text-sm font-black text-gray-500 uppercase tracking-widest hover:bg-gray-100 rounded-2xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoEdicao}
+                  className="flex-[2] py-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 bg-theme-primary text-white shadow-indigo-100 hover:bg-theme-primary-hover disabled:opacity-50"
+                >
+                  {salvandoEdicao ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+                  <span>Salvar</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

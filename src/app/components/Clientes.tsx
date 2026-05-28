@@ -43,6 +43,17 @@ function getPostosDaEmpresa(empresa?: Empresa) {
   }));
 }
 
+function getPostoSelecionado(cliente: Cliente) {
+  const postoId = cliente.ID_POSTOS;
+  const empresa = typeof cliente.empresa === 'object' ? cliente.empresa : undefined;
+  const posto = getPostosDaEmpresa(empresa).find((item) => item.id === postoId || item.key === postoId);
+
+  return {
+    id: postoId || 'N/A',
+    nome: posto?.nome || (postoId ? 'Posto selecionado' : 'Sem posto selecionado'),
+  };
+}
+
 export function Clientes() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -55,6 +66,8 @@ export function Clientes() {
   const [exibirModal, setExibirModal] = useState(false);
   const [exibirModalDetalhes, setExibirModalDetalhes] = useState(false);
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+  const [clienteEdicao, setClienteEdicao] = useState<Cliente | null>(null);
+  const [menuClienteAberto, setMenuClienteAberto] = useState<string | null>(null);
   const [listaPostos, setListaPostos] = useState([{ id: '', nome: '' }]);
   const [statusEnvio, setStatusEnvio] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   
@@ -111,18 +124,27 @@ export function Clientes() {
         telefone: formData.telefone,
         empresa: formData.empresa,
         ID_POSTOS: formData.ID_POSTOS,
-        password: formData.password,
       };
+
+      if (formData.password) payload.password = formData.password;
+      if (clienteEdicao) {
+        delete (payload as Partial<ClienteRequest>).email;
+      }
 
       console.log('Enviando payload de criação de cliente:', payload);
 
-      await clientesService.criar(payload);
+      if (clienteEdicao) {
+        await clientesService.atualizacaoParcial(clienteEdicao.id, payload);
+      } else {
+        await clientesService.criar({ ...payload, password: formData.password });
+      }
       
       setStatusEnvio('success');
       
       // Delay pequeno para mostrar o sucesso
       setTimeout(() => {
         setExibirModal(false);
+        setClienteEdicao(null);
         setStatusEnvio('idle');
         // Limpa o form
         setFormData({
@@ -186,6 +208,58 @@ export function Clientes() {
   const empresaSelecionada = empresas.find((empresa) => empresa.id === formData.empresa);
   const postosDaEmpresa = getPostosDaEmpresa(empresaSelecionada);
 
+  const resetFormCliente = () => {
+    setFormData({
+      nome: '',
+      email: '',
+      password: '',
+      empresa: '',
+      ID_POSTOS: '',
+      telefone: '',
+      nif: '',
+      ip_servidor: '',
+      endereco: ''
+    });
+  };
+
+  const abrirNovoCliente = () => {
+    setClienteEdicao(null);
+    resetFormCliente();
+    setErro('');
+    setExibirModal(true);
+  };
+
+  const abrirEdicaoCliente = (cliente: Cliente) => {
+    const empresaId = typeof cliente.empresa === 'object' ? cliente.empresa.id : '';
+    setClienteEdicao(cliente);
+    setFormData({
+      nome: cliente.nome || '',
+      email: cliente.email || '',
+      password: '',
+      empresa: empresaId || '',
+      ID_POSTOS: cliente.ID_POSTOS || '',
+      telefone: cliente.telefone || '',
+      nif: cliente.nif || '',
+      ip_servidor: cliente.ip_servidor || '',
+      endereco: cliente.endereco || ''
+    });
+    setErro('');
+    setExibirModal(true);
+  };
+
+  const removerCliente = async (cliente: Cliente) => {
+    if (!window.confirm(`Deseja eliminar o cliente ${cliente.nome}?`)) return;
+    setErro('');
+    try {
+      await clientesService.deletar(cliente.id);
+      setMenuClienteAberto(null);
+      await carregarClientes();
+    } catch (error: any) {
+      console.error('Erro ao eliminar cliente:', error);
+      setErro(error?.message || 'Falha ao eliminar cliente.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -194,7 +268,7 @@ export function Clientes() {
           <p className="text-sm text-gray-500">Visualize e gerencie todos os clientes da plataforma.</p>
         </div>
         <button 
-          onClick={() => setExibirModal(true)}
+          onClick={abrirNovoCliente}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
         >
           <Plus className="w-5 h-5" />
@@ -307,14 +381,58 @@ export function Clientes() {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Editar">
+                      <button
+                        onClick={() => abrirEdicaoCliente(cliente)}
+                        className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                        title="Editar"
+                      >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar">
+                      <button
+                        onClick={() => removerCliente(cliente)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Eliminar"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <button className="p-2 text-gray-400 group-hover:hidden"><MoreVertical className="w-4 h-4" /></button>
+                    <div className="relative inline-block">
+                      <button
+                        onClick={() => setMenuClienteAberto((atual) => atual === cliente.id ? null : cliente.id)}
+                        className="p-2 text-gray-400"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                      {menuClienteAberto === cliente.id && (
+                        <div className="absolute right-0 top-9 w-44 bg-white border border-gray-100 rounded-xl shadow-xl z-20 overflow-hidden text-left">
+                          <button
+                            onClick={() => {
+                              setClienteSelecionado(cliente);
+                              setExibirModalDetalhes(true);
+                              setMenuClienteAberto(null);
+                            }}
+                            className="w-full px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                          >
+                            <Eye className="w-4 h-4" /> Ver detalhes
+                          </button>
+                          <button
+                            onClick={() => {
+                              abrirEdicaoCliente(cliente);
+                              setMenuClienteAberto(null);
+                            }}
+                            className="w-full px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                          >
+                            <Edit2 className="w-4 h-4" /> Editar
+                          </button>
+                          <button
+                            onClick={() => removerCliente(cliente)}
+                            className="w-full px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"
+                          >
+                            <Trash2 className="w-4 h-4" /> Eliminar
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -352,8 +470,8 @@ export function Clientes() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-gray-900">Novo Cliente</h3>
-              <button onClick={() => setExibirModal(false)} className="p-2 hover:bg-gray-100 rounded-full"><X className="w-5 h-5 text-gray-400" /></button>
+              <h3 className="text-xl font-bold text-gray-900">{clienteEdicao ? 'Editar Cliente' : 'Novo Cliente'}</h3>
+              <button onClick={() => { setExibirModal(false); setClienteEdicao(null); }} className="p-2 hover:bg-gray-100 rounded-full"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <div className="p-8 max-h-[60vh] overflow-y-auto">
               <form id="form-cliente" onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -374,10 +492,11 @@ export function Clientes() {
                   <input 
                     type="email" 
                     name="email"
-                    required
+                    required={!clienteEdicao}
+                    disabled={!!clienteEdicao}
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500" 
                     placeholder="joao@exemplo.com" 
                   />
                 </div>
@@ -386,7 +505,7 @@ export function Clientes() {
                   <input 
                     type="password" 
                     name="password"
-                    required
+                    required={!clienteEdicao}
                     value={formData.password}
                     onChange={handleInputChange}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
@@ -553,6 +672,7 @@ export function Clientes() {
                   type="button" 
                   onClick={() => {
                     setExibirModal(false);
+                    setClienteEdicao(null);
                     setErro('');
                     setStatusEnvio('idle');
                   }} 
@@ -578,7 +698,7 @@ export function Clientes() {
                   ) : statusEnvio === 'success' ? (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Cadastrado!</span>
+                      <span>Salvo!</span>
                     </>
                   ) : statusEnvio === 'error' ? (
                     <>
@@ -586,7 +706,7 @@ export function Clientes() {
                       <span>Tentar Novamente</span>
                     </>
                   ) : (
-                    'Salvar Cliente'
+                    clienteEdicao ? 'Salvar Alterações' : 'Salvar Cliente'
                   )}
                 </button>
               </div>
@@ -612,9 +732,23 @@ export function Clientes() {
             <div className="p-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Informações de Conexão */}
-                <div className="space-y-6">
-                  <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100">
-                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100">
+                    <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <Monitor className="w-4 h-4 text-emerald-600" />
+                      Meu Posto
+                    </h4>
+                    <div>
+                      <p className="text-xl font-black text-emerald-800 leading-tight">{getPostoSelecionado(clienteSelecionado).nome}</p>
+                      <div className="mt-4 pt-4 border-t border-emerald-100">
+                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">ID do posto</p>
+                        <p className="text-lg font-black text-gray-900 font-mono">{getPostoSelecionado(clienteSelecionado).id}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                       <Server className="w-4 h-4 text-indigo-500" />
                       Configuração do Servidor
                     </h4>
@@ -624,30 +758,36 @@ export function Clientes() {
                     </div>
                   </div>
 
-                  <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
-                    <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100">
+                    <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                       <Phone className="w-4 h-4 text-indigo-500" />
                       Contato Direto
                     </h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-indigo-600 shadow-sm">
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center text-indigo-600 shadow-sm flex-shrink-0">
                           <Mail className="w-4 h-4" />
                         </div>
-                        <span className="text-sm font-bold text-gray-700">{clienteSelecionado.email}</span>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Email</p>
+                          <p className="text-sm font-bold text-gray-800 break-all">{clienteSelecionado.email}</p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-indigo-600 shadow-sm">
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center text-indigo-600 shadow-sm flex-shrink-0">
                           <Phone className="w-4 h-4" />
                         </div>
-                        <span className="text-sm font-bold text-gray-700">{clienteSelecionado.telefone || 'N/A'}</span>
+                        <div>
+                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Telefone</p>
+                          <p className="text-sm font-bold text-gray-800">{clienteSelecionado.telefone || 'N/A'}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Lista de Postos */}
-                <div>
+                <div className="hidden">
                   <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2 ml-1">
                     <Monitor className="w-4 h-4 text-indigo-500" />
                     Lista de Postos ({Object.keys(clienteSelecionado.postos || {}).length})
