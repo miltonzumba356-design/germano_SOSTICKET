@@ -139,11 +139,11 @@ function ActionMenu({
 
 // Dados mock para os gráficos
 const dadosStatusBase = [
-  { chave: 'aberto', name: 'Abertas', total: 0 },
-  { chave: 'em_andamento', name: 'Em andamento', total: 0 },
-  { chave: 'resolvido', name: 'Resolvidas', total: 0 },
-  { chave: 'fechado', name: 'Fechadas', total: 0 },
-  { chave: 'concluido', name: 'Concluídas', total: 0 },
+  { chave: 'aberto', name: 'Abertas', total: 0, fill: '#2563eb' },
+  { chave: 'em_andamento', name: 'Em andamento', total: 0, fill: '#f59e0b' },
+  { chave: 'resolvido', name: 'Resolvidas', total: 0, fill: '#10b981' },
+  { chave: 'fechado', name: 'Fechadas', total: 0, fill: '#64748b' },
+  { chave: 'concluido', name: 'Concluídas', total: 0, fill: '#7c3aed' },
 ];
 
 const dadosMockHorasTecnico = [
@@ -172,7 +172,7 @@ function intervencoesPorStatus(intervencoes: Intervencao[]) {
     if (item) item.total += 1;
   });
 
-  return status.map(({ name, total }) => ({ name, total }));
+  return status.map(({ name, total, fill }) => ({ name, total, fill }));
 }
 
 function serieMensalContratos(contratos: Contrato[]) {
@@ -493,7 +493,11 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
                   cursor={{ fill: '#f8fafc' }}
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                 />
-                <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#3b82f6" />
+                <Bar dataKey="total" radius={[6, 6, 0, 0]}>
+                  {dadosIntervencoesStatus.map((entry) => (
+                    <Cell key={entry.name} fill={entry.fill} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
