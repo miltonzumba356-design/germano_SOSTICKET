@@ -1,10 +1,10 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+﻿import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { authService } from '../services/api';
 
-// Tipos de usuário conforme a API
+// Tipos de usuÃ¡rio conforme a API
 type TipoPerfil = 'admin' | 'tecnico' | 'cliente';
 
-// Interface do usuário autenticado
+// Interface do usuÃ¡rio autenticado
 interface Usuario {
   id: string;
   nome: string;
@@ -14,7 +14,7 @@ interface Usuario {
   avatar_url?: string;
 }
 
-// Interface do contexto de autenticação
+// Interface do contexto de autenticaÃ§Ã£o
 interface AuthContextData {
   usuario: Usuario | null;
   token: string | null;
@@ -38,31 +38,58 @@ function normalizarUsuario(dadosUsuario: any, emailFallback?: string): Usuario {
   };
 }
 
-// Provider do contexto de autenticação
+function tokenExpirado(token: string) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1] || ''));
+    if (!payload.exp) return false;
+    return payload.exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+}
+
+function limparSessaoLocal() {
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('auth_user');
+  localStorage.removeItem('auth_user_email');
+}
+
+// Provider do contexto de autenticaÃ§Ã£o
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
 
-  // Verifica se há token salvo ao carregar a aplicação
+  // Verifica se hÃ¡ token salvo ao carregar a aplicaÃ§Ã£o
   useEffect(() => {
     const carregarUsuario = async () => {
       const tokenSalvo = localStorage.getItem('auth_token');
       const usuarioSalvo = localStorage.getItem('auth_user');
 
       if (tokenSalvo) {
+        if (tokenExpirado(tokenSalvo) || !usuarioSalvo) {
+          limparSessaoLocal();
+          setToken(null);
+          setUsuario(null);
+          setCarregando(false);
+          return;
+        }
+
         setToken(tokenSalvo);
 
-        if (usuarioSalvo) {
-          try {
-            setUsuario(JSON.parse(usuarioSalvo));
-          } catch {
-            localStorage.removeItem('auth_user');
-          }
+        try {
+          setUsuario(JSON.parse(usuarioSalvo));
+        } catch {
+          limparSessaoLocal();
+          setToken(null);
+          setUsuario(null);
+          setCarregando(false);
+          return;
         }
 
         try {
-          // Busca perfil do usuário usando o token
+          // Busca perfil do usuÃ¡rio usando o token
           const perfil = await authService.getProfile(localStorage.getItem('auth_user_email') || undefined);
 
           if (perfil) {
@@ -71,13 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('auth_user', JSON.stringify(usuarioNormalizado));
             localStorage.setItem('auth_user_email', usuarioNormalizado.email);
           }
-        } catch (error) {
-          console.error('Erro ao carregar perfil:', error);
-          // Se falhar, limpa o token inválido
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem('auth_user');
-          localStorage.removeItem('auth_user_email');
+        } catch {
+          // Sessão expirada/inválida antes do login: limpa sem poluir o console.
+          limparSessaoLocal();
           setToken(null);
           setUsuario(null);
         }
@@ -89,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     carregarUsuario();
   }, []);
 
-  // Função de login - chama API /api/v1/auth/login
+  // FunÃ§Ã£o de login - chama API /api/v1/auth/login
   const login = async (email: string, password: string) => {
     try {
       const response = await authService.login(email, password);
@@ -98,10 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const tokenRecebido = response.access_token || response.access || response.token || (response.data?.access_token);
       setToken(tokenRecebido);
 
-      // Tenta extrair o usuário da resposta
+      // Tenta extrair o usuÃ¡rio da resposta
       let dadosUsuario = response.usuario || response.user || response.profile || response.data?.usuario;
 
-      // Se não houver dados do usuário na resposta do login, busca o perfil explicitamente
+      // Se nÃ£o houver dados do usuÃ¡rio na resposta do login, busca o perfil explicitamente
       if (!dadosUsuario) {
         try {
           dadosUsuario = await authService.getProfile(email);
@@ -116,8 +139,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('auth_user', JSON.stringify(usuarioNormalizado));
         localStorage.setItem('auth_user_email', usuarioNormalizado.email);
       } else {
-        // Fallback caso realmente não consiga nada, mas tenha token
-        // Isso evita ficar preso na tela de login se o token for válido
+        // Fallback caso realmente nÃ£o consiga nada, mas tenha token
+        // Isso evita ficar preso na tela de login se o token for vÃ¡lido
         const usuarioFallback = {
           id: 'temp-id',
           nome: email.split('@')[0],
@@ -134,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Função de logout - chama API /api/v1/auth/logout
+  // FunÃ§Ã£o de logout - chama API /api/v1/auth/logout
   const logout = async () => {
     try {
       await authService.logout();
@@ -148,11 +171,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Função de cadastro - chama API /api/v1/auth/register
+  // FunÃ§Ã£o de cadastro - chama API /api/v1/auth/register
   const register = async (dados: any) => {
     try {
       await authService.register(dados);
-      // Opcional: fazer login automático após cadastro
+      // Opcional: fazer login automÃ¡tico apÃ³s cadastro
       // await login(dados.email, dados.password);
     } catch (error) {
       console.error('Erro no cadastro:', error);
@@ -175,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Hook personalizado para usar o contexto de autenticação
+// Hook personalizado para usar o contexto de autenticaÃ§Ã£o
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
