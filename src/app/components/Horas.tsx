@@ -372,7 +372,8 @@ export function Horas() {
 
   const arredondarHoras = (segundos: number) => {
     const horas = segundos / 3600;
-    return Math.round(horas * 4) / 4; // Arredonda para 0.25
+    const arredondado = Number(horas.toFixed(2));
+    return segundos > 0 && arredondado === 0 ? 0.01 : arredondado;
   };
 
   const intervencoesComCronometro = new Set(cronometros.map((cronometro) => cronometro.intervencao_id));
@@ -796,7 +797,8 @@ export function Horas() {
                           <label className="text-[10px] font-black text-gray-400 uppercase">Ajuste Final (Horas):</label>
                           <input 
                             type="number" 
-                            step="0.25"
+                            step="0.01"
+                            min="0.01"
                             value={pararDados.horasAjustadas}
                             onChange={(e) => setPararDados({...pararDados, horasAjustadas: parseFloat(e.target.value)})}
                             className="w-20 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-black text-center"

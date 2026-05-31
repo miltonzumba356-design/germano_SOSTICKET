@@ -47,6 +47,25 @@ function totalAnexos(intervencao: Intervencao) {
   return Number(intervencao.total_anexos ?? intervencao.anexos?.length ?? 0);
 }
 
+function getHorasRegistadas(intervencao: Intervencao) {
+  const horas = Number(intervencao.horas_trabalhadas || 0);
+  if (Number.isFinite(horas) && horas > 0) return horas;
+
+  if (!intervencao.data_inicio_intervencao || !intervencao.data_fim_intervencao) {
+    return 0;
+  }
+
+  const inicio = new Date(intervencao.data_inicio_intervencao).getTime();
+  const fim = new Date(intervencao.data_fim_intervencao).getTime();
+  if (!Number.isFinite(inicio) || !Number.isFinite(fim) || fim <= inicio) {
+    return 0;
+  }
+
+  const horasPorDatas = (fim - inicio) / 3600000;
+  const arredondado = Number(horasPorDatas.toFixed(2));
+  return arredondado === 0 ? 0.01 : arredondado;
+}
+
 const ORDEM_STATUS_INTERVENCAO = ['aberto', 'em_andamento', 'resolvido', 'concluido', 'fechado'];
 
 function historicoStatusSequencial(historico: any[] = []) {
@@ -1104,7 +1123,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                       <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Métricas</h4>
                       <div className="flex items-center gap-3 text-sm font-bold text-gray-700">
                         <Clock className="w-4 h-4 text-theme-primary" />
-                        <span>{formatarHoras(intervencaoDetalhe.horas_trabalhadas)} registradas</span>
+                        <span>{formatarHoras(getHorasRegistadas(intervencaoDetalhe))} registradas</span>
                       </div>
                     </div>
                   </div>

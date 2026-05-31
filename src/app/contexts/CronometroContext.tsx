@@ -41,6 +41,15 @@ function normalizarSessao(sessao: CronometroState): CronometroState {
   };
 }
 
+function normalizarHorasRegistaveis(horas: number, segundosContados: number) {
+  if (!Number.isFinite(horas) || horas <= 0) {
+    return segundosContados > 0 ? 0.01 : 0;
+  }
+
+  const horasArredondadas = Number(horas.toFixed(2));
+  return segundosContados > 0 && horasArredondadas === 0 ? 0.01 : horasArredondadas;
+}
+
 export function CronometroProvider({ children }: { children: React.ReactNode }) {
   const { usuario, carregando: carregandoAuth } = useAuth();
   const [cronometros, setCronometros] = useState<CronometroState[]>([]);
@@ -175,8 +184,9 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
   const parar = async (id: string, _descricao?: string, horas?: number) => {
     const sessao = cronometros.find(c => c.id === id);
     if (sessao?.intervencao_id) {
-      const horasCalculadas = Number(horas ?? ((sessao.tempoAtual || sessao.tempo_acumulado || 0) / 3600));
-      const horasValidas = Number.isFinite(horasCalculadas) ? Math.max(0, horasCalculadas) : 0;
+      const segundosContados = sessao.tempoAtual || sessao.tempo_acumulado || 0;
+      const horasCalculadas = Number(horas && horas > 0 ? horas : segundosContados / 3600);
+      const horasValidas = normalizarHorasRegistaveis(horasCalculadas, segundosContados);
       const fim = new Date();
       const inicio = new Date(fim.getTime() - horasValidas * 60 * 60 * 1000);
       await intervencoesService.atualizacaoParcial(sessao.intervencao_id, {
