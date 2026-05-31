@@ -2,9 +2,7 @@ import {
   Cliente,
   ClienteRequest,
   Contrato,
-  CronometroState,
   Empresa,
-  HoraTrabalho,
   InicioSessao,
   Intervencao,
   Notificacao,
@@ -493,15 +491,6 @@ export const intervencoesService = {
     create(`/intervencoes/${id}/atribuir`, { tecnico_id }),
 };
 
-export const horasService = {
-  listar: (params?: QueryParams) => list<HoraTrabalho>('/horas', params),
-  obterPorId: (id: string) => fetchAPI<HoraTrabalho>(`/horas/${id}`),
-  criar: (dados: Partial<HoraTrabalho> & { intervencao_id: string }) => create<HoraTrabalho>('/horas', dados),
-  atualizar: (id: string, dados: Partial<HoraTrabalho>) => update<HoraTrabalho>(`/horas/${id}`, dados),
-  atualizacaoParcial: (id: string, dados: Partial<HoraTrabalho>) => update<HoraTrabalho>(`/horas/${id}`, dados, 'PATCH'),
-  deletar: (id: string) => fetchAPI<void>(`/horas/${id}`, { method: 'DELETE' }),
-};
-
 export const configuracoesService = {
   listar: (params?: QueryParams) => list('/configuracoes', params),
   atualizar: (dados: unknown) => update('/configuracoes', dados),
@@ -522,23 +511,10 @@ export const notificacoesService = {
     }, 'PUT'),
 };
 
-export const cronometroService = {
-  listar: () => fetchAPI<CronometroState[]>('/cronometros'),
-  iniciar: (dados: { intervencao_id: string; tipo: 'presencial' | 'remoto' }) =>
-    create<CronometroState>('/cronometros', dados),
-  pausar: (id: string) => create<CronometroState>(`/cronometros/${id}/pausar`, {}),
-  retomar: (id: string) => create<CronometroState>(`/cronometros/${id}/retomar`, {}),
-  parar: (id: string, dados: { descricao: string; horas: number }) =>
-    create<void>(`/cronometros/${id}/parar`, dados),
-  sincronizar: (id: string, tempo_acumulado: number) =>
-    update<CronometroState>(`/cronometros/${id}`, { tempo_acumulado }, 'PATCH'),
-};
-
 export const relatoriosService = {
   dashboardAdmin: () => fetchAPI<any>('/relatorios/dashboard-admin'),
   dashboardTecnico: () => fetchAPI<any>('/relatorios/dashboard-tecnico'),
   dashboardCliente: () => fetchAPI<any>('/relatorios/dashboard-cliente'),
-  horas: () => fetchAPI<any>('/relatorios/horas'),
   intervencoes: () => fetchAPI<any>('/relatorios/intervencoes'),
   financeiro: () => fetchAPI<any>('/relatorios/financeiro'),
 };

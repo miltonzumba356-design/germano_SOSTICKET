@@ -31,7 +31,6 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useCronometro } from '../contexts/CronometroContext';
 import { 
-  horasService, 
   intervencoesService, 
   relatoriosService 
 } from '../services/api';
@@ -44,6 +43,157 @@ function normalizarLista<T>(response: any): T[] {
     : response?.results || response?.data?.results || response?.data || [];
 
   return Array.isArray(lista) ? lista : [];
+}
+
+function normalizarDashboardTecnico(response: any) {
+  return response?.data || response || {};
+}
+
+function primeiroNumero(...valores: unknown[]) {
+  for (const valor of valores) {
+    const numero = Number(valor);
+    if (Number.isFinite(numero)) return numero;
+  }
+
+  return 0;
+}
+
+function extrairResumoTecnico(dados: any) {
+  const resumo = dados?.resumo || dados?.horas || dados?.metricas || {};
+  const graficoSemana = normalizarLista<any>(dados?.grafico_horas_semana || []);
+  const semanaAtual = graficoSemana.length ? graficoSemana[graficoSemana.length - 1] : null;
+
+  return {
+    hoje: primeiroNumero(
+      dados?.horas_hoje,
+      dados?.total_horas_hoje,
+      dados?.hoje,
+      resumo?.hoje,
+      resumo?.horas_hoje,
+      resumo?.total_horas_hoje
+    ),
+    semana: primeiroNumero(
+      dados?.horas_semana,
+      dados?.total_horas_semana,
+      dados?.semana,
+      resumo?.semana,
+      resumo?.horas_semana,
+      resumo?.total_horas_semana,
+      semanaAtual?.total
+    ),
+    mes: primeiroNumero(
+      dados?.total_horas_mes,
+      dados?.horas_mes,
+      dados?.mes,
+      resumo?.mes,
+      resumo?.total_horas_mes
+    ),
+  };
+}
+
+function calcularResumoPorIntervencoes(intervencoes: Intervencao[]) {
+  const agora = new Date();
+  const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  const inicioSemana = new Date(inicioHoje);
+  inicioSemana.setDate(inicioHoje.getDate() - inicioHoje.getDay());
+  const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+
+  return intervencoes.reduce((total, intervencao) => {
+    const dataBase = intervencao.data_conclusao || intervencao.data_fim_intervencao || intervencao.data_abertura;
+    if (!dataBase) return total;
+
+    const data = new Date(dataBase);
+    if (Number.isNaN(data.getTime())) return total;
+
+    const horas = primeiroNumero(intervencao.horas_trabalhadas);
+    if (data >= inicioHoje) total.hoje += horas;
+    if (data >= inicioSemana) total.semana += horas;
+    if (data >= inicioMes) total.mes += horas;
+    return total;
+  }, { hoje: 0, semana: 0, mes: 0 });
+}
+
+function combinarResumoTecnico(dados: any, intervencoes: Intervencao[]) {
+  const resumoDashboard = extrairResumoTecnico(dados);
+  const resumoIntervencoes = calcularResumoPorIntervencoes(intervencoes);
+
+  return {
+    hoje: resumoDashboard.hoje || resumoIntervencoes.hoje,
+    semana: resumoDashboard.semana || resumoIntervencoes.semana,
+    mes: resumoDashboard.mes || resumoIntervencoes.mes,
+  };
+}
+
+function extrairHistoricoTecnico(dados: any): HoraTrabalho[] {
+  const historico = normalizarLista<any>(
+    dados?.historico_horas ||
+    dados?.historico ||
+    dados?.ultimas_horas ||
+    dados?.ultimas_intervencoes ||
+    dados?.proximas_intervencoes ||
+    dados?.intervencoes ||
+    dados?.detalhes ||
+    []
+  );
+
+  return historico.map((item, index) => ({
+    id: String(item.id || item.hora_id || item.intervencao_id || `historico-${index}`),
+    intervencao: String(item.intervencao || item.intervencao_id || item.numero || item.intervencao_numero || ''),
+    intervencao_id: item.intervencao_id || item.id,
+    intervencao_numero: item.intervencao_numero || item.numero,
+    intervencao_titulo: item.intervencao_titulo || item.titulo,
+    tecnico: item.tecnico,
+    tecnico_id: item.tecnico_id,
+    tecnico_nome: item.tecnico_nome,
+    cliente_nome: item.cliente_nome,
+    horas: primeiroNumero(item.horas, item.horas_trabalhadas, item.total_horas, item.tempo_total),
+    data_trabalho: item.data_trabalho || item.data || item.data_conclusao || item.data_fim_intervencao || item.data_abertura || new Date().toISOString(),
+    descricao: item.descricao || item.observacao || item.titulo || 'Sem descricao registada.',
+    tipo: item.tipo || item.actuacao_tipo || 'remoto',
+  }));
+}
+
+function extrairSerieHoras(dados: any) {
+  const serie = normalizarLista<any>(
+    dados?.grafico_horas_semana ||
+    dados?.horas_por_dia ||
+    dados?.grafico_horas ||
+    dados?.grafico_horas_dia ||
+    dados?.evolucao_horas ||
+    dados?.historico_horas ||
+    []
+  );
+
+  return serie.map((item, index) => ({
+    name: item.dia || item.data || item.semana || item.mes || item.periodo || `Item ${index + 1}`,
+    total: primeiroNumero(item.total, item.horas, item.valor, item.total_horas),
+  }));
+}
+
+function extrairStatusRelatorio(dados: any) {
+  const status = normalizarLista<any>(dados?.por_status || dados?.status_intervencoes || dados?.intervencoes_por_status || []);
+
+  return status.map((item) => ({
+    label: item.status || item.name || item.label || 'Sem status',
+    total: primeiroNumero(item.total, item.value, item.quantidade),
+  }));
+}
+
+function intervencaoParaHistorico(item: Intervencao, index: number): HoraTrabalho {
+  return {
+    id: String(item.id || `intervencao-${index}`),
+    intervencao: String(item.numero || item.id || ''),
+    intervencao_id: item.id,
+    intervencao_numero: item.numero,
+    intervencao_titulo: item.titulo,
+    tecnico_id: item.tecnico_id,
+    tecnico_nome: item.tecnico_nome,
+    cliente_nome: item.cliente_nome,
+    horas: primeiroNumero(item.horas_trabalhadas),
+    data_trabalho: item.data_conclusao || item.data_fim_intervencao || item.data_abertura || new Date().toISOString(),
+    descricao: item.descricao || item.titulo || 'Sem descricao registada.',
+    tipo: item.actuacao_tipo || 'remoto',
+  };
 }
 
 export function Horas() {
@@ -60,6 +210,7 @@ export function Horas() {
   // Estados para Registro
   const [intervencoes, setIntervencoes] = useState<Intervencao[]>([]);
   const [resumoTecnico, setResumoTecnico] = useState({ hoje: 0, semana: 0, mes: 0 });
+  const [dashboardTecnico, setDashboardTecnico] = useState<any>({});
   const [novaSessao, setNovaSessao] = useState({
     intervencao_id: '',
     tipo: 'presencial' as 'presencial' | 'remoto'
@@ -100,26 +251,50 @@ export function Horas() {
     setCarregando(true);
     try {
       if (tab === 'cronometro') {
-        const [intervs, resumo] = await Promise.all([
+        const [intervs, dashboard] = await Promise.all([
           intervencoesService.listar({ limit: 100 }),
-          relatoriosService.horas().catch(() => ({ hoje: 0, semana: 0, mes: 0 }))
+          relatoriosService.dashboardTecnico().catch(() => ({}))
         ]);
         
         const results = normalizarLista<Intervencao>(intervs);
+        const dadosDashboard = normalizarDashboardTecnico(dashboard);
         
         setIntervencoes(results.filter((intervencao: Intervencao) =>
           !['resolvido', 'fechado', 'concluido'].includes(intervencao.status || '')
         ));
-        setResumoTecnico(resumo);
-      } else if (tab === 'minhas') {
-        const response = await horasService.listar({
-          page: pagina,
-          limit: 10,
-          search: busca,
-          tipo: filtroTipo
+        setDashboardTecnico(dadosDashboard);
+        setResumoTecnico(combinarResumoTecnico(dadosDashboard, results));
+      } else if (tab === 'minhas' || tab === 'historico') {
+        const [dashboard, intervs] = await Promise.all([
+          relatoriosService.dashboardTecnico(),
+          intervencoesService.listar({ limit: 100 }),
+        ]);
+        const dadosDashboard = normalizarDashboardTecnico(dashboard);
+        const intervencoesTecnico = normalizarLista<Intervencao>(intervs);
+        const historicoIntervencoes = intervencoesTecnico.map(intervencaoParaHistorico);
+        const historicoDashboard = extrairHistoricoTecnico(dadosDashboard);
+        const historico = historicoIntervencoes.length ? historicoIntervencoes : historicoDashboard;
+        const termo = busca.trim().toLowerCase();
+        const historicoFiltrado = historico.filter((item) => {
+          const texto = [
+            item.intervencao,
+            item.intervencao_numero,
+            item.intervencao_titulo,
+            item.cliente_nome,
+            item.descricao,
+            item.tipo,
+          ].filter(Boolean).join(' ').toLowerCase();
+          const bateBusca = !termo || texto.includes(termo);
+          const bateTipo = !filtroTipo || item.tipo === filtroTipo;
+          return bateBusca && bateTipo;
         });
-        setListaHoras(response.data || []);
-        setTotalPaginas(response.pagination?.total_pages || 1);
+        const total = Math.max(1, Math.ceil(historicoFiltrado.length / 10));
+        const inicio = (pagina - 1) * 10;
+
+        setDashboardTecnico(dadosDashboard);
+        setResumoTecnico(combinarResumoTecnico(dadosDashboard, intervencoesTecnico));
+        setListaHoras(historicoFiltrado.slice(inicio, inicio + 10));
+        setTotalPaginas(total);
       }
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
@@ -202,6 +377,23 @@ export function Horas() {
 
   const intervencoesComCronometro = new Set(cronometros.map((cronometro) => cronometro.intervencao_id));
   const intervencoesDisponiveis = intervencoes.filter((intervencao) => !intervencoesComCronometro.has(intervencao.id));
+  const serieHoras = extrairSerieHoras(dashboardTecnico);
+  const statusRelatorio = extrairStatusRelatorio(dashboardTecnico);
+  const totalIntervencoes = primeiroNumero(
+    dashboardTecnico?.intervencoes_atribuidas,
+    dashboardTecnico?.total_intervencoes,
+    dashboardTecnico?.meus_tickets
+  );
+  const intervencoesAndamento = primeiroNumero(
+    dashboardTecnico?.intervencoes_em_andamento,
+    dashboardTecnico?.em_andamento,
+    dashboardTecnico?.tickets_em_andamento
+  );
+  const intervencoesConcluidas = primeiroNumero(
+    dashboardTecnico?.intervencoes_concluidas_mes,
+    dashboardTecnico?.intervencoes_concluidas,
+    dashboardTecnico?.concluidas_mes
+  );
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -436,7 +628,8 @@ export function Horas() {
                             <tr key={h.id} className="hover:bg-gray-50/50 transition-colors">
                                <td className="px-8 py-6 text-sm font-black text-gray-900">{new Date(h.data_trabalho).toLocaleDateString('pt-PT')}</td>
                                <td className="px-8 py-6">
-                                  <div className="text-sm font-black text-emerald-600">#{h.intervencao.split('-')[0].toUpperCase()}</div>
+                                  <div className="text-sm font-black text-emerald-600">#{h.intervencao_numero || String(h.intervencao || h.intervencao_id || 'INT').split('-')[0].toUpperCase()}</div>
+                                  <div className="text-xs text-gray-400 font-bold truncate max-w-xs">{h.intervencao_titulo || h.cliente_nome || 'Intervenção'}</div>
                                </td>
                                <td className="px-8 py-6">
                                   <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-black">{formatarHoras(h.horas)}</span>
@@ -447,10 +640,113 @@ export function Horas() {
                                </td>
                             </tr>
                          ))}
+                         {listaHoras.length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="px-8 py-16 text-center text-gray-400 font-bold">Sem histórico no dashboard técnico.</td>
+                            </tr>
+                         )}
                       </tbody>
                    </table>
                 </div>
+                {totalPaginas > 1 && (
+                  <div className="p-6 border-t border-gray-50 flex items-center justify-end gap-3">
+                    <button
+                      onClick={() => setPagina((prev) => Math.max(1, prev - 1))}
+                      disabled={pagina === 1}
+                      className="p-2 rounded-xl border border-gray-100 text-gray-500 disabled:opacity-40"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs font-black text-gray-500 uppercase">{pagina} / {totalPaginas}</span>
+                    <button
+                      onClick={() => setPagina((prev) => Math.min(totalPaginas, prev + 1))}
+                      disabled={pagina === totalPaginas}
+                      className="p-2 rounded-xl border border-gray-100 text-gray-500 disabled:opacity-40"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
              </div>
+          </div>
+        )}
+
+        {tab === 'historico' && (
+          <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <StatCard icon={Clock} label="Horas Hoje" value={formatarHoras(resumoTecnico.hoje)} sub="Dashboard técnico" color="emerald" />
+              <StatCard icon={TrendingUp} label="Horas Semana" value={formatarHoras(resumoTecnico.semana)} sub="Dashboard técnico" color="blue" />
+              <StatCard icon={FileText} label="Tickets" value={String(totalIntervencoes)} sub="Atribuídos ao técnico" color="indigo" />
+              <StatCard icon={CheckCircle2} label="Concluídos" value={String(intervencoesConcluidas)} sub="Período atual" color="amber" />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="bg-white rounded-[32px] border border-gray-100 shadow-xl overflow-hidden">
+                <div className="p-8 border-b border-gray-50">
+                  <h3 className="text-xl font-black text-gray-900">Resumo de Produtividade</h3>
+                  <p className="text-sm text-gray-500 font-medium">Dados vindos do dashboard técnico.</p>
+                </div>
+                <div className="p-8 space-y-5">
+                  {[
+                    { label: 'Intervenções atribuídas', value: totalIntervencoes },
+                    { label: 'Em andamento', value: intervencoesAndamento },
+                    { label: 'Concluídas', value: intervencoesConcluidas },
+                    { label: 'Horas do mês', value: formatarHoras(resumoTecnico.mes) },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center justify-between border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                      <span className="text-sm font-black text-gray-500 uppercase tracking-widest">{item.label}</span>
+                      <span className="text-lg font-black text-gray-900">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[32px] border border-gray-100 shadow-xl overflow-hidden">
+                <div className="p-8 border-b border-gray-50">
+                  <h3 className="text-xl font-black text-gray-900">Horas por Período</h3>
+                  <p className="text-sm text-gray-500 font-medium">Série recebida pelo relatório técnico.</p>
+                </div>
+                <div className="p-8 space-y-4">
+                  {(serieHoras.length ? serieHoras : [
+                    { name: 'Hoje', total: resumoTecnico.hoje },
+                    { name: 'Semana', total: resumoTecnico.semana },
+                    { name: 'Mês', total: resumoTecnico.mes },
+                  ]).map((item) => {
+                    const maximo = Math.max(1, resumoTecnico.mes, ...serieHoras.map((serie) => serie.total));
+                    const largura = Math.min(100, Math.round((item.total / maximo) * 100));
+                    return (
+                      <div key={item.name} className="space-y-2">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-xs font-black text-gray-500 uppercase tracking-widest truncate">{item.name}</span>
+                          <span className="text-xs font-black text-emerald-600">{formatarHoras(item.total)}</span>
+                        </div>
+                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${largura}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[32px] border border-gray-100 shadow-xl overflow-hidden">
+              <div className="p-8 border-b border-gray-50">
+                <h3 className="text-xl font-black text-gray-900">Intervenções por Estado</h3>
+              </div>
+              <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(statusRelatorio.length ? statusRelatorio : [
+                  { label: 'Atribuídas', total: totalIntervencoes },
+                  { label: 'Em andamento', total: intervencoesAndamento },
+                  { label: 'Concluídas', total: intervencoesConcluidas },
+                ]).map((item) => (
+                  <div key={item.label} className="bg-gray-50 rounded-[24px] p-6">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.label}</p>
+                    <p className="text-3xl font-black text-gray-900 mt-2">{item.total}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

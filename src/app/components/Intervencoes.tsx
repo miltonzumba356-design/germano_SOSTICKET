@@ -3,6 +3,7 @@ import { Intervencao } from '../types/api';
 import type { Cliente } from '../types/api';
 import { intervencoesService, contratosService, clientesService, tecnicosService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useCronometro } from '../contexts/CronometroContext';
 import { formatarHoras } from '../utils/formatters';
 import { 
   Search, 
@@ -46,8 +47,26 @@ function totalAnexos(intervencao: Intervencao) {
   return Number(intervencao.total_anexos ?? intervencao.anexos?.length ?? 0);
 }
 
+const ORDEM_STATUS_INTERVENCAO = ['aberto', 'em_andamento', 'resolvido', 'concluido', 'fechado'];
+
+function historicoStatusSequencial(historico: any[] = []) {
+  const porStatus = new Map<string, any>();
+
+  historico.forEach((item) => {
+    if (!item?.status || porStatus.has(item.status)) return;
+    porStatus.set(item.status, item);
+  });
+
+  return Array.from(porStatus.values()).sort((a, b) => {
+    const ordemA = ORDEM_STATUS_INTERVENCAO.indexOf(a.status);
+    const ordemB = ORDEM_STATUS_INTERVENCAO.indexOf(b.status);
+    return (ordemA === -1 ? 999 : ordemA) - (ordemB === -1 ? 999 : ordemB);
+  });
+}
+
 export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => void }) {
   const { usuario } = useAuth();
+  const { limparPorIntervencao } = useCronometro();
   const isAdmin = usuario?.perfil === 'admin';
   const isTecnico = usuario?.perfil === 'tecnico';
   const isCliente = usuario?.perfil === 'cliente';
@@ -246,12 +265,20 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         throw new Error('Informe a data final para resolver ou concluir a intervenção.');
       }
 
-      await intervencoesService.atualizacaoParcial(intervencaoStatus.id, {
-        status: formStatus.status as any,
+      const dadosAtualizacao: Partial<Intervencao> = {
         actuacao_tipo: formStatus.actuacao_tipo as any,
         data_inicio_intervencao: formStatus.data_inicio_intervencao ? new Date(formStatus.data_inicio_intervencao).toISOString() : undefined,
         data_fim_intervencao: formStatus.data_fim_intervencao ? new Date(formStatus.data_fim_intervencao).toISOString() : undefined,
-      });
+      };
+
+      if (formStatus.status !== intervencaoStatus.status) {
+        dadosAtualizacao.status = formStatus.status as any;
+      }
+
+      await intervencoesService.atualizacaoParcial(intervencaoStatus.id, dadosAtualizacao);
+      if (statusFinal) {
+        limparPorIntervencao(intervencaoStatus.id);
+      }
 
       setExibirModalStatus(false);
       setIntervencaoStatus(null);
@@ -488,6 +515,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
       await intervencoesService.atualizacaoParcial(intervencao.id, {
         status: 'resolvido',
       });
+      limparPorIntervencao(intervencao.id);
       setMenuAcoesAberto(null);
       await carregarIntervencoes();
       if (exibirModalDetalhes && intervencaoDetalhe?.id === intervencao.id) {
@@ -1116,7 +1144,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                       Linha do Tempo
                     </h4>
                     <div className="space-y-4 border-l-2 border-indigo-50 ml-3 pl-6">
-                      {intervencaoDetalhe.historico_status?.map((hist, i) => (
+                      {historicoStatusSequencial(intervencaoDetalhe.historico_status).map((hist, i) => (
                         <div key={i} className="relative">
                           <div className="absolute -left-[31px] top-0 w-3 h-3 bg-theme-primary rounded-full border-2 border-white"></div>
                           <p className="text-xs font-black text-theme-primary uppercase tracking-tight">{hist.status.replace('_', ' ')}</p>

@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts';
 import { relatoriosService } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { formatarHoras } from '../utils/formatters';
 
 const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6b7280'];
@@ -26,19 +27,26 @@ const RELATORIO_HORAS_VAZIO = {
 };
 
 export function Relatorios() {
+  const { usuario } = useAuth();
   const [tipoRelatorio, setTipoRelatorio] = useState<'dashboard' | 'intervencoes' | 'horas' | 'financeiro'>('dashboard');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
   const [dados, setDados] = useState<any>({});
 
   const carregarRelatorioHoras = async () => {
-    try {
-      return await relatoriosService.horas();
-    } catch (error) {
-      console.warn('Relatorio de horas indisponivel na API:', error);
-      setErro('O relatorio de horas ainda nao esta disponivel nesta versao da API. A tela foi mantida sem dados para evitar erro.');
-      return RELATORIO_HORAS_VAZIO;
-    }
+    const response = usuario?.perfil === 'tecnico'
+      ? await relatoriosService.dashboardTecnico()
+      : await relatoriosService.dashboardAdmin();
+    const dados = response?.data || response || {};
+
+    return {
+      ...RELATORIO_HORAS_VAZIO,
+      ...dados,
+      total_horas: dados.total_horas_mes ?? dados.total_horas ?? 0,
+      media_horas_intervencao: dados.media_horas_dia ?? dados.media_horas_intervencao ?? 0,
+      por_tecnico: dados.grafico_horas_tecnico || dados.por_tecnico || [],
+      detalhes: dados.grafico_horas_semana || dados.detalhes || [],
+    };
   };
 
   const carregarDados = async () => {

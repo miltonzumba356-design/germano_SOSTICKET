@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useCronometro } from '../contexts/CronometroContext';
 import { adminMenu, MenuItem } from '../data/AdminMenu';
 import { notificacoesService } from '../services/api';
 import { Notificacao } from '../types/api';
@@ -29,10 +30,24 @@ import { WidgetCronometro } from './WidgetCronometro';
 // Componente de layout principal da aplicação
 export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
   const { usuario, logout } = useAuth();
+  const { cronometros } = useCronometro();
   const [menuAberto, setMenuAberto] = useState(false);
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [painelNotificacoes, setPainelNotificacoes] = useState(false);
   const [carregandoNotificacoes, setCarregandoNotificacoes] = useState(false);
+
+  const tentarLogout = () => {
+    const temCronometroPendente = cronometros.some((cronometro) =>
+      ['ativo', 'pausado'].includes(cronometro.status)
+    );
+
+    if (temCronometroPendente) {
+      window.alert('Existe um cronómetro ativo. Salve ou pare o cronómetro antes de terminar a sessão.');
+      return;
+    }
+
+    logout();
+  };
 
   const carregarNotificacoes = async () => {
     if (!usuario) return;
@@ -187,7 +202,7 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
                 <p className="text-sm font-medium text-gray-900">{usuario?.nome}</p>
                 <p className="text-xs text-gray-500 capitalize">{usuario?.perfil}</p>
               </div>
-              <button onClick={logout} className="p-2 hover:bg-gray-100 rounded-lg text-gray-600">
+              <button onClick={tentarLogout} className="p-2 hover:bg-gray-100 rounded-lg text-gray-600">
                 <LogOut className="w-5 h-5" />
               </button>
             </div>
@@ -224,7 +239,7 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
                 </button>
               );
             })}
-            <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 sm:hidden mt-4">
+            <button onClick={tentarLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 sm:hidden mt-4">
               <LogOut className="w-5 h-5" />
               <span className="text-sm">Sair</span>
             </button>
@@ -243,4 +258,3 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
     </div>
   );
 }
-

@@ -12,44 +12,92 @@ interface CronometroContextType {
   parar: (id: string, descricao: string, horas: number) => Promise<void>;
   recuperarLocal: () => void;
   limparLocal: (id: string) => void;
+  limparPorIntervencao: (intervencaoId: string) => void;
 }
 
 const STORAGE_KEY = 'cronometros_ativos';
+const STATUS_FINAIS = ['resolvido', 'fechado', 'concluido'];
 const CronometroContext = createContext<CronometroContextType | undefined>(undefined);
 
+function calcularTempoAtual(sessao: CronometroState) {
+  if (sessao.status !== 'ativo') {
+    return sessao.tempoAtual ?? sessao.tempo_acumulado ?? 0;
+  }
+
+  const inicio = new Date(sessao.hora_inicio).getTime();
+  if (!Number.isFinite(inicio)) {
+    return sessao.tempoAtual ?? sessao.tempo_acumulado ?? 0;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - inicio) / 1000));
+}
+
+function normalizarSessao(sessao: CronometroState): CronometroState {
+  const tempoAtual = calcularTempoAtual(sessao);
+  return {
+    ...sessao,
+    tempoAtual,
+    tempo_acumulado: tempoAtual,
+  };
+}
+
 export function CronometroProvider({ children }: { children: React.ReactNode }) {
-  const { usuario } = useAuth();
+  const { usuario, carregando: carregandoAuth } = useAuth();
   const [cronometros, setCronometros] = useState<CronometroState[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [localCarregado, setLocalCarregado] = useState(false);
 
   useEffect(() => {
+    if (carregandoAuth) return;
+
+    setCarregando(true);
+    setLocalCarregado(false);
+
     if (usuario?.perfil === 'tecnico') {
       carregarSessoes();
     } else {
       setCronometros([]);
       setCarregando(false);
+      setLocalCarregado(true);
     }
-  }, [usuario]);
+  }, [usuario, carregandoAuth]);
 
-  const carregarSessoes = () => {
+  const carregarSessoes = async () => {
     try {
       const local = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      setCronometros(Array.isArray(local) ? local : []);
+      const sessoesLocais = Array.isArray(local) ? local.map(normalizarSessao) : [];
+      const sessoesValidas = await Promise.all(
+        sessoesLocais.map(async (sessao) => {
+          if (!sessao.intervencao_id) return null;
+
+          try {
+            const intervencao = await intervencoesService.obterPorId(sessao.intervencao_id);
+            return STATUS_FINAIS.includes(intervencao.status || '') ? null : sessao;
+          } catch {
+            return sessao;
+          }
+        })
+      );
+
+      setCronometros(sessoesValidas.filter(Boolean) as CronometroState[]);
     } catch (error) {
       console.error('Erro ao carregar cronometros locais:', error);
       setCronometros([]);
     } finally {
       setCarregando(false);
+      setLocalCarregado(true);
     }
   };
 
   useEffect(() => {
+    if (!localCarregado) return;
+
     if (cronometros.length > 0) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cronometros));
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
-  }, [cronometros]);
+  }, [cronometros, localCarregado]);
 
   useEffect(() => {
     if (cronometros.length === 0) return;
@@ -74,11 +122,18 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
     if (cronometros.length >= 3) {
       throw new Error('Limite de 3 cronometros atingido.');
     }
+    if (cronometros.some(c => c.intervencao_id === intervencaoId)) {
+      throw new Error('Esta intervenção já tem um cronometro ativo.');
+    }
 
-    await intervencoesService.atualizacaoParcial(intervencaoId, {
-      status: 'em_andamento',
-    });
-    const intervencao = await intervencoesService.obterPorId(intervencaoId);
+    const intervencaoAtual = await intervencoesService.obterPorId(intervencaoId);
+    const intervencao = intervencaoAtual.status === 'em_andamento'
+      ? intervencaoAtual
+      : await intervencoesService.atualizacaoParcial(intervencaoId, {
+          status: 'em_andamento',
+          actuacao_tipo: tipo,
+          data_inicio_intervencao: new Date().toISOString(),
+        });
 
     const novaSessao: CronometroState = {
       id: `local-${intervencaoId}-${Date.now()}`,
@@ -121,10 +176,15 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
     const sessao = cronometros.find(c => c.id === id);
     if (sessao?.intervencao_id) {
       const horasCalculadas = Number(horas ?? ((sessao.tempoAtual || sessao.tempo_acumulado || 0) / 3600));
+      const horasValidas = Number.isFinite(horasCalculadas) ? Math.max(0, horasCalculadas) : 0;
+      const fim = new Date();
+      const inicio = new Date(fim.getTime() - horasValidas * 60 * 60 * 1000);
       await intervencoesService.atualizacaoParcial(sessao.intervencao_id, {
         status: 'resolvido',
-        horas_trabalhadas: Number.isFinite(horasCalculadas) ? horasCalculadas.toFixed(2) : '0.00',
-        data_conclusao: new Date().toISOString(),
+        actuacao_tipo: sessao.tipo,
+        data_inicio_intervencao: inicio.toISOString(),
+        data_fim_intervencao: fim.toISOString(),
+        horas_trabalhadas: horasValidas.toFixed(2),
       });
     }
     setCronometros(prev => prev.filter(c => c.id !== id));
@@ -138,6 +198,10 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
     setCronometros(prev => prev.filter(c => c.id !== id));
   };
 
+  const limparPorIntervencao = (intervencaoId: string) => {
+    setCronometros(prev => prev.filter(c => c.intervencao_id !== intervencaoId));
+  };
+
   return (
     <CronometroContext.Provider value={{
       cronometros,
@@ -147,7 +211,8 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
       retomar,
       parar,
       recuperarLocal,
-      limparLocal
+      limparLocal,
+      limparPorIntervencao
     }}>
       {children}
     </CronometroContext.Provider>

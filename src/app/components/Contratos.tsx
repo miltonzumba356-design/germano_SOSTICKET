@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import { Contrato, Cliente } from '../types/api';
+import { Contrato, Empresa } from '../types/api';
 import { formatarHoras } from '../utils/formatters';
-import { contratosService, clientesService } from '../services/api';
+import { contratosService, empresasService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   Plus, 
@@ -23,13 +23,13 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-function getEmpresaNome(empresa: Cliente['empresa']) {
+function getEmpresaNome(empresa: Empresa | string | undefined) {
   if (!empresa) return '';
   if (typeof empresa === 'string') return empresa;
   return String(empresa.nome || empresa.Email_empresa || 'Empresa');
 }
 
-function getEmpresaId(empresa: Cliente['empresa'] | unknown) {
+function getEmpresaId(empresa: Empresa | string | unknown) {
   if (!empresa || typeof empresa === 'string') return undefined;
   return (empresa as { id?: string }).id;
 }
@@ -84,7 +84,7 @@ function contratoHtml(contrato: Contrato, autoPrint = false) {
     <div class="header">
       <div>
         <h1>SOSTicket</h1>
-        <p class="muted">Assistência Técnica e Consultoria</p>
+        <p class="muted">AssistÃªncia TÃ©cnica e Consultoria</p>
         <div class="contacts">
           <div><strong>Tel:</strong> +244 9XX XXX XXX</div>
           <div><strong>Email:</strong> contacto@empresa.com</div>
@@ -92,7 +92,7 @@ function contratoHtml(contrato: Contrato, autoPrint = false) {
         </div>
       </div>
       <div style="text-align:right">
-        <h2>Relatório de Contrato</h2>
+        <h2>RelatÃ³rio de Contrato</h2>
         <p class="muted">${escapeHtml(contrato.numero || contrato.id)}</p>
       </div>
     </div>
@@ -107,16 +107,16 @@ function contratoHtml(contrato: Contrato, autoPrint = false) {
         <div class="card"><div class="label">Horas Utilizadas</div><div class="value">${escapeHtml(contrato.horas_utilizadas)}</div></div>
         <div class="card"><div class="label">Valor Hora</div><div class="value">${escapeHtml(contrato.valor_hora)} Kz</div></div>
         <div class="card"><div class="label">Valor Total</div><div class="value">${escapeHtml(contrato.valor_total)} Kz</div></div>
-        <div class="card"><div class="label">Início</div><div class="value">${formatarData(contrato.data_inicio)}</div></div>
+        <div class="card"><div class="label">InÃ­cio</div><div class="value">${formatarData(contrato.data_inicio)}</div></div>
         <div class="card"><div class="label">Fim</div><div class="value">${formatarData(contrato.data_fim)}</div></div>
       </div>
     </div>
     <div class="section">
-      <div class="section-title">Observações</div>
-      <div class="observacoes">${escapeHtml(contrato.observacoes || 'Sem observações.')}</div>
+      <div class="section-title">ObservaÃ§Ãµes</div>
+      <div class="observacoes">${escapeHtml(contrato.observacoes || 'Sem observaÃ§Ãµes.')}</div>
     </div>
     <div class="assinaturas">
-      <div class="assinatura"><div class="linha">Responsável Técnico</div></div>
+      <div class="assinatura"><div class="linha">ResponsÃ¡vel TÃ©cnico</div></div>
       <div class="assinatura"><div class="linha">Cliente</div></div>
     </div>
     <div class="footer">Documento gerado automaticamente pelo sistema SOSTicket.</div>
@@ -131,7 +131,7 @@ export function Contratos() {
   const isAdmin = usuario?.perfil === 'admin';
   const isCliente = usuario?.perfil === 'cliente';
   const [contratos, setContratos] = useState<Contrato[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
@@ -143,9 +143,9 @@ export function Contratos() {
   const [contratoDetalhe, setContratoDetalhe] = useState<Contrato | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
-  // Estado do formulário de novo contrato
+  // Estado do formulÃ¡rio de novo contrato
   const [formData, setFormData] = useState({
-    cliente_id: '',
+    empresa_id: '',
     tipo: 'horas' as 'horas' | 'mensal' | 'anual',
     horas_contratadas: '0',
     horas_utilizadas: '0',
@@ -175,27 +175,28 @@ export function Contratos() {
       setTotalPaginas((response as any)?.pagination?.total_pages || (response as any)?.total_pages || 1);
     } catch (error: any) {
       console.error('Erro ao carregar contratos:', error);
-      setErro('Não foi possível carregar os contratos.');
+      setErro('NÃ£o foi possÃ­vel carregar os contratos.');
     } finally {
       setCarregando(false);
     }
   };
 
-  const carregarClientes = async () => {
+  const carregarEmpresas = async () => {
     try {
-      const response = await clientesService.listar({ limit: 100 });
+      const response = await empresasService.listar({ limit: 100 });
       const lista = Array.isArray(response) 
         ? response 
-        : (response as any)?.results || (response as any)?.data || [];
-      setClientes(Array.isArray(lista) ? lista : []);
+        : (response as any)?.results || (response as any)?.data?.results || (response as any)?.data || [];
+      setEmpresas(Array.isArray(lista) ? lista : []);
     } catch (err) {
-      console.error('Erro ao carregar clientes para o contrato:', err);
+      console.error('Erro ao carregar empresas para o contrato:', err);
+      setEmpresas([]);
     }
   };
 
   useEffect(() => {
     carregarContratos();
-    carregarClientes();
+    carregarEmpresas();
   }, [pagina, filtroStatus]);
 
   useEffect(() => {
@@ -230,8 +231,8 @@ export function Contratos() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.cliente_id) {
-      setErro('Selecione um cliente.');
+    if (!formData.empresa_id) {
+      setErro('Selecione uma empresa.');
       return;
     }
 
@@ -240,23 +241,16 @@ export function Contratos() {
     setErro('');
 
     try {
-      const clienteSelecionado = clientes.find((cliente) => cliente.id === formData.cliente_id);
-      const empresaId = getEmpresaId(clienteSelecionado?.empresa);
-
-      if (!empresaId) {
-        throw new Error('O cliente selecionado não tem empresa associada no backend.');
-      }
-
       await contratosService.criar({
-        empresa_id: empresaId,
-        tipo_contrato: 'suporte', // Valor padrão ou vindo do form
+        empresa_id: formData.empresa_id,
+        tipo_contrato: 'suporte', // Valor padrÃ£o ou vindo do form
         tipo_de_pagamento: formData.tipo as any,
         horas_contratadas: String(formData.horas_contratadas),
         valor_total: String(formData.valor_total),
         data_inicio: formData.data_inicio,
         data_fim: formData.data_fim,
         status: formData.status as any,
-        descricao_contrato: formData.descricao_contrato.trim() || 'Contrato de suporte técnico.',
+        descricao_contrato: formData.descricao_contrato.trim() || 'Contrato de suporte tÃ©cnico.',
         observacoes: formData.observacoes
       });
       
@@ -264,7 +258,7 @@ export function Contratos() {
       setTimeout(() => {
         setExibirModal(false);
         setFormData({
-          cliente_id: '',
+          empresa_id: '',
           tipo: 'horas',
           horas_contratadas: '0',
           horas_utilizadas: '0',
@@ -303,7 +297,7 @@ export function Contratos() {
   const handleRenovarContrato = async (contrato: Contrato) => {
     const empresaId = contrato.empresa_id || getEmpresaId(contrato.empresa_detalhe) || getEmpresaId(contrato.cliente);
     if (!empresaId) {
-      setErro('Não foi possível identificar a empresa deste contrato para renovar.');
+      setErro('NÃ£o foi possÃ­vel identificar a empresa deste contrato para renovar.');
       return;
     }
 
@@ -366,7 +360,7 @@ export function Contratos() {
       await carregou;
 
       const documento = iframe.contentDocument;
-      if (!documento?.body) throw new Error('Não foi possível preparar o contrato para PDF.');
+      if (!documento?.body) throw new Error('NÃ£o foi possÃ­vel preparar o contrato para PDF.');
 
       const canvas = await html2canvas(documento.body, {
         scale: 2,
@@ -421,7 +415,7 @@ export function Contratos() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Gestão de Contratos</h2>
+          <h2 className="text-2xl font-bold text-gray-900">GestÃ£o de Contratos</h2>
           <p className="text-sm text-gray-500">Controle de pacotes de horas e mensalidades.</p>
         </div>
         {isAdmin && (
@@ -443,7 +437,7 @@ export function Contratos() {
             type="text" 
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por número ou cliente..." 
+            placeholder="Buscar por nÃºmero ou cliente..." 
             className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-theme-primary transition-all"
           />
         </div>
@@ -575,18 +569,18 @@ export function Contratos() {
             <form onSubmit={handleSubmit}>
               <div className="p-8 space-y-4">
                 <div className="space-y-1">
-                  <label className="text-sm font-bold text-gray-700">Cliente *</label>
+                  <label className="text-sm font-bold text-gray-700">Empresa *</label>
                   <select 
-                    name="cliente_id"
+                    name="empresa_id"
                     required
-                    value={formData.cliente_id}
+                    value={formData.empresa_id}
                     onChange={handleInputChange}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
                   >
-                    <option value="">Selecione um cliente...</option>
-                    {clientes.map(c => {
-                      const empresaNome = getEmpresaNome(c.empresa);
-                      return <option key={c.id} value={c.id}>{c.nome}{empresaNome ? ` (${empresaNome})` : ''}</option>;
+                    <option value="">Selecione uma empresa...</option>
+                    {empresas.map((empresa) => {
+                      const empresaNome = getEmpresaNome(empresa);
+                      return <option key={empresa.id} value={empresa.id}>{empresaNome}</option>;
                     })}
                   </select>
                 </div>
@@ -639,20 +633,20 @@ export function Contratos() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-bold text-gray-700">Descrição do Contrato *</label>
+                  <label className="text-sm font-bold text-gray-700">DescriÃ§Ã£o do Contrato *</label>
                   <textarea
                     name="descricao_contrato"
                     required
                     value={formData.descricao_contrato}
                     onChange={handleInputChange}
                     rows={3}
-                    placeholder="Ex.: Contrato de suporte técnico e manutenção."
+                    placeholder="Ex.: Contrato de suporte tÃ©cnico e manutenÃ§Ã£o."
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-theme-primary"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-sm font-bold text-gray-700">Data Início *</label>
+                    <label className="text-sm font-bold text-gray-700">Data InÃ­cio *</label>
                     <input 
                       type="date" 
                       name="data_inicio"
@@ -675,7 +669,7 @@ export function Contratos() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-bold text-gray-700">Observações</label>
+                  <label className="text-sm font-bold text-gray-700">ObservaÃ§Ãµes</label>
                   <textarea 
                     name="observacoes"
                     value={formData.observacoes}
@@ -726,11 +720,11 @@ export function Contratos() {
         </div>
       )}
 
-      {/* Paginação */}
+      {/* PaginaÃ§Ã£o */}
       {totalPaginas > 1 && (
         <div className="mt-8 flex items-center justify-between bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
           <p className="text-xs font-black text-gray-400 uppercase tracking-widest ml-2">
-            Página {pagina} de {totalPaginas}
+            PÃ¡gina {pagina} de {totalPaginas}
           </p>
           <div className="flex items-center gap-2">
             <button 
@@ -794,7 +788,7 @@ export function Contratos() {
                 </div>
               </div>
 
-              {/* Grid de Informações Principais */}
+              {/* Grid de InformaÃ§Ãµes Principais */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 <div className="space-y-1">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tipo</p>
@@ -805,7 +799,7 @@ export function Contratos() {
                   <p className="text-sm font-bold text-gray-900 capitalize">{contratoDetalhe.tipo_de_pagamento}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Início</p>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">InÃ­cio</p>
                     <p className="text-sm font-bold text-gray-900">
                       {contratoDetalhe.data_inicio ? new Date(contratoDetalhe.data_inicio).toLocaleDateString('pt-PT') : '-'}
                     </p>
@@ -820,7 +814,7 @@ export function Contratos() {
 
               <hr className="border-gray-100" />
 
-              {/* Estatísticas de Horas e Valores */}
+              {/* EstatÃ­sticas de Horas e Valores */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
                   <div className="flex items-center gap-2 mb-2">
@@ -839,7 +833,7 @@ export function Contratos() {
                 <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Horas Disponíveis</p>
+                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Horas DisponÃ­veis</p>
                   </div>
                   <p className="text-xl font-black text-emerald-700">{formatarHoras(contratoDetalhe.horas_disponiveis)}</p>
                 </div>
@@ -858,7 +852,7 @@ export function Contratos() {
 
               {contratoDetalhe.observacoes && (
                 <div className="space-y-2">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Observações Internas</p>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">ObservaÃ§Ãµes Internas</p>
                   <p className="text-sm text-gray-600 bg-gray-50 p-4 rounded-2xl italic">"{contratoDetalhe.observacoes}"</p>
                 </div>
               )}

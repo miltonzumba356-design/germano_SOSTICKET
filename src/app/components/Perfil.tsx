@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, Camera, CheckCircle2, Loader2, Lock, LogOut, Mail, Phone, Save, Shield, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useCronometro } from '../contexts/CronometroContext';
 import { perfilService } from '../services/api';
 import { Usuario } from '../types/api';
 
 export function Perfil() {
   const { usuario, logout } = useAuth();
+  const { cronometros } = useCronometro();
   const [abaAtiva, setAbaAtiva] = useState<'info' | 'senha' | 'notificacoes'>('info');
   const [perfil, setPerfil] = useState<Usuario | null>(usuario);
   const [formData, setFormData] = useState({
@@ -106,6 +108,19 @@ export function Perfil() {
     }
   };
 
+  const tentarLogout = () => {
+    const temCronometroPendente = cronometros.some((cronometro) =>
+      ['ativo', 'pausado'].includes(cronometro.status)
+    );
+
+    if (temCronometroPendente) {
+      window.alert('Existe um cronómetro ativo. Salve ou pare o cronómetro antes de terminar a sessão.');
+      return;
+    }
+
+    logout();
+  };
+
   const nomePerfil = perfil?.nome || usuario?.nome || 'Utilizador';
 
   return (
@@ -115,7 +130,7 @@ export function Perfil() {
           <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Meu Perfil</h2>
           <p className="text-gray-500 mt-1">Gerencie dados pessoais, preferências e segurança.</p>
         </div>
-        <button onClick={logout} className="flex items-center gap-2 px-4 py-2 text-red-600 font-bold hover:bg-red-50 rounded-xl transition-all">
+        <button onClick={tentarLogout} className="flex items-center gap-2 px-4 py-2 text-red-600 font-bold hover:bg-red-50 rounded-xl transition-all">
           <LogOut className="w-5 h-5" />
           Sair
         </button>
