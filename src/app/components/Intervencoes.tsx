@@ -66,7 +66,13 @@ function getHorasRegistadas(intervencao: Intervencao) {
   return arredondado === 0 ? 0.01 : arredondado;
 }
 
-const ORDEM_STATUS_INTERVENCAO = ['aberto', 'em_andamento', 'resolvido', 'concluido', 'fechado'];
+const FLUXO_STATUS_INTERVENCAO = ['aberto', 'em_andamento', 'concluido', 'fechado'];
+const ORDEM_STATUS_INTERVENCAO = [...FLUXO_STATUS_INTERVENCAO, 'resolvido'];
+
+function proximoStatusIntervencao(status?: string) {
+  const index = FLUXO_STATUS_INTERVENCAO.indexOf(status || '');
+  return index >= 0 ? FLUXO_STATUS_INTERVENCAO[index + 1] : undefined;
+}
 
 function historicoStatusSequencial(historico: any[] = []) {
   const porStatus = new Map<string, any>();
@@ -262,9 +268,10 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
 
   const abrirModalStatus = (intervencao: Intervencao) => {
     const agora = new Date().toISOString().slice(0, 16);
+    const proximoStatus = proximoStatusIntervencao(intervencao.status);
     setIntervencaoStatus(intervencao);
     setFormStatus({
-      status: intervencao.status === 'aberto' ? 'em_andamento' : (intervencao.status || 'em_andamento'),
+      status: proximoStatus || intervencao.status || 'em_andamento',
       actuacao_tipo: intervencao.actuacao_tipo || 'remoto',
       data_inicio_intervencao: intervencao.data_inicio_intervencao ? new Date(intervencao.data_inicio_intervencao).toISOString().slice(0, 16) : agora,
       data_fim_intervencao: intervencao.data_fim_intervencao ? new Date(intervencao.data_fim_intervencao).toISOString().slice(0, 16) : '',
@@ -279,9 +286,18 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
     setSalvandoStatus(true);
     setErro('');
     try {
-      const statusFinal = ['resolvido', 'fechado', 'concluido'].includes(formStatus.status);
+      const statusAlterado = formStatus.status !== intervencaoStatus.status;
+      const proximoStatus = proximoStatusIntervencao(intervencaoStatus.status);
+
+      if (statusAlterado && formStatus.status !== proximoStatus) {
+        throw new Error(proximoStatus
+          ? `Transição inválida. O próximo status deve ser "${proximoStatus.replace('_', ' ')}".`
+          : 'Esta intervenção já está no último status do fluxo.');
+      }
+
+      const statusFinal = ['fechado', 'concluido'].includes(formStatus.status);
       if (statusFinal && !formStatus.data_fim_intervencao) {
-        throw new Error('Informe a data final para resolver ou concluir a intervenção.');
+        throw new Error('Informe a data final para concluir ou fechar a intervenção.');
       }
 
       const dadosAtualizacao: Partial<Intervencao> = {
@@ -290,7 +306,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         data_fim_intervencao: formStatus.data_fim_intervencao ? new Date(formStatus.data_fim_intervencao).toISOString() : undefined,
       };
 
-      if (formStatus.status !== intervencaoStatus.status) {
+      if (statusAlterado) {
         dadosAtualizacao.status = formStatus.status as any;
       }
 
@@ -531,8 +547,20 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const handleResolverIntervencao = async (intervencao: Intervencao) => {
     setErro('');
     try {
+      if (intervencao.status !== 'em_andamento') {
+        throw new Error('Para concluir, a intervenção precisa estar em andamento.');
+      }
+
+      const fim = new Date();
+      const inicio = intervencao.data_inicio_intervencao
+        ? new Date(intervencao.data_inicio_intervencao)
+        : new Date(fim.getTime() - 0.01 * 60 * 60 * 1000);
+
       await intervencoesService.atualizacaoParcial(intervencao.id, {
-        status: 'resolvido',
+        status: 'concluido',
+        actuacao_tipo: intervencao.actuacao_tipo || 'remoto',
+        data_inicio_intervencao: inicio.toISOString(),
+        data_fim_intervencao: fim.toISOString(),
       });
       limparPorIntervencao(intervencao.id);
       setMenuAcoesAberto(null);
@@ -541,8 +569,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         setIntervencaoDetalhe(await intervencoesService.obterPorId(intervencao.id));
       }
     } catch (err: any) {
-      console.error('Erro ao resolver intervenção:', err);
-      setErro(err.message || 'Falha ao resolver a intervenção.');
+      console.error('Erro ao concluir intervenção:', err);
+      setErro(err.message || 'Falha ao concluir a intervenção.');
     }
   };
 
@@ -939,7 +967,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                             Lançar horas
                           </button>
                         )}
-                        {isTecnico && (
+                        {isTecnico && intervencao.status === 'em_andamento' && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -947,7 +975,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                             }}
                             className="w-full px-4 py-2.5 text-left text-sm font-bold text-emerald-600 hover:bg-emerald-50"
                           >
-                            Resolver
+                            Concluir
                           </button>
                         )}
                         {isCliente && (
@@ -1277,8 +1305,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                 >
                   <option value="aberto">Aberto</option>
                   <option value="em_andamento">Em andamento</option>
-                  <option value="resolvido">Resolvido</option>
                   <option value="concluido">Concluído</option>
+                  <option value="fechado">Fechado</option>
                 </select>
               </div>
 

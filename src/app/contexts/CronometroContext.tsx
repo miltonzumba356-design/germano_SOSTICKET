@@ -190,7 +190,7 @@ export function CronometroProvider({ children }: { children: React.ReactNode }) 
       const fim = new Date();
       const inicio = new Date(fim.getTime() - horasValidas * 60 * 60 * 1000);
       await intervencoesService.atualizacaoParcial(sessao.intervencao_id, {
-        status: 'resolvido',
+        status: 'concluido',
         actuacao_tipo: sessao.tipo,
         data_inicio_intervencao: inicio.toISOString(),
         data_fim_intervencao: fim.toISOString(),
