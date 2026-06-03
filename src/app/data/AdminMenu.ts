@@ -26,7 +26,7 @@ export const adminMenu: MenuItem[] = [
   },
   {
     id: 'clientes',
-    label: 'Clientes',
+    label: 'Utilizadores',
     icon: Users,
   },
   {

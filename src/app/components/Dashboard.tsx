@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -14,8 +14,12 @@ import {
   Calendar,
   MoreVertical,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Download,
+  Printer
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { intervencoesService, relatoriosService, contratosService } from '../services/api';
 import { Intervencao, Contrato } from '../types/api';
 import { formatarHoras } from '../utils/formatters';
@@ -237,6 +241,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [menuAberto, setMenuAberto] = useState<string | null>(null);
+  const dashboardRef = useRef<HTMLDivElement>(null);
 
   const carregarDados = async () => {
     setCarregando(true);
@@ -327,9 +332,42 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
     <ActionMenu id={id} activeId={menuAberto} setActiveId={setMenuAberto} items={items} />
   );
   const atualizarItem = { label: 'Atualizar dados', onClick: carregarDados };
+  const imprimirDashboard = () => {
+    window.print();
+  };
+
+  const baixarDashboardPdf = async () => {
+    if (!dashboardRef.current) return;
+
+    const canvas = await html2canvas(dashboardRef.current, {
+      scale: 2,
+      backgroundColor: '#f9fafb',
+      useCORS: true,
+    });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(`dashboard-admin-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
 
   return (
-    <div className="space-y-8 pb-8">
+    <div ref={dashboardRef} className="space-y-8 pb-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
@@ -338,6 +376,24 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
           <p className="text-gray-500 mt-1">{subtituloDashboard}</p>
         </div>
         <div className="flex items-center gap-3">
+          {isAdmin && (
+            <>
+              <button
+                onClick={imprimirDashboard}
+                className="p-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                title="Imprimir dashboard"
+              >
+                <Printer className="w-5 h-5" />
+              </button>
+              <button
+                onClick={baixarDashboardPdf}
+                className="p-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                title="Baixar dashboard em PDF"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+            </>
+          )}
           <div className="bg-white border border-gray-200 rounded-lg px-4 py-2 flex items-center gap-2 text-sm text-gray-600 shadow-sm">
             <Calendar className="w-4 h-4" />
             <span className="capitalize">{periodoAtual}</span>
