@@ -92,6 +92,7 @@ export interface ClienteRequest {
 
 export interface Tecnico extends Usuario {
   perfil: 'tecnico';
+  BI?: string;
   especialidades?: string[];
   status?: StatusUtilizador;
   intervencoes_ativas?: number | string;
