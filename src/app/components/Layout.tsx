@@ -4,6 +4,7 @@ import { useCronometro } from '../contexts/CronometroContext';
 import { adminMenu, MenuItem } from '../data/AdminMenu';
 import { notificacoesService } from '../services/api';
 import { Notificacao } from '../types/api';
+import { useProtecaoTela } from '../hooks/useProtecaoTela';
 import {
   LayoutDashboard,
   Ticket,
@@ -16,7 +17,8 @@ import {
   X,
   Calendar,
   Clock,
-  Building2
+  Building2,
+  ShieldOff,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -31,6 +33,7 @@ import { WidgetCronometro } from './WidgetCronometro';
 export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
   const { usuario, logout } = useAuth();
   const { cronometros } = useCronometro();
+  const { bloqueado } = useProtecaoTela(usuario?.perfil === 'tecnico');
   const [menuAberto, setMenuAberto] = useState(false);
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [painelNotificacoes, setPainelNotificacoes] = useState(false);
@@ -130,10 +133,23 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
 
   return (
     <div className={`min-h-screen bg-gray-50 ${
-      usuario?.perfil === 'tecnico' ? 'role-tecnico' : 
-      usuario?.perfil === 'cliente' ? 'role-cliente' : 
+      usuario?.perfil === 'tecnico' ? 'role-tecnico' :
+      usuario?.perfil === 'cliente' ? 'role-cliente' :
       'role-admin'
     }`}>
+
+      {/* Overlay de protecção de ecrã — visível apenas para técnicos quando a janela perde foco */}
+      {bloqueado && usuario?.perfil === 'tecnico' && (
+        <div
+          className="fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center gap-4 select-none"
+          aria-hidden="true"
+        >
+          <ShieldOff className="w-16 h-16 text-white/20" />
+          <p className="text-white/40 text-sm font-medium tracking-widest uppercase">
+            Conteúdo protegido
+          </p>
+        </div>
+      )}
       {/* ... existing header and sidebar ... */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="px-4 py-3 flex items-center justify-between">
