@@ -180,13 +180,30 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const carregarContratos = async () => {
     if (!isCliente && !isAdmin) return;
     try {
-      const resp = await contratosService.listar({ 
-        status: 'activo', 
-        limit: 50,
-        cliente_id: isAdmin ? novoTicket.cliente_id || undefined : usuario?.id
-      });
-      const lista = Array.isArray(resp) 
-        ? resp 
+      const queryParams: Record<string, string | number | boolean | null | undefined> = {
+        status: 'activo',
+        limit: 100,
+      };
+
+      if (isAdmin) {
+        if (!novoTicket.cliente_id) return;
+        // Busca a empresa do cliente seleccionado para listar contratos da empresa
+        const clienteSelecionado = clientes.find((c) => c.id === novoTicket.cliente_id);
+        const empresaId = getEmpresaId(clienteSelecionado?.empresa);
+        if (empresaId) {
+          // Contrato está ligado à empresa, não directamente ao utilizador
+          queryParams.empresa_id = empresaId;
+        } else {
+          // Fallback: tenta por cliente_id caso não haja empresa associada
+          queryParams.cliente_id = novoTicket.cliente_id;
+        }
+      } else {
+        queryParams.cliente_id = usuario?.id;
+      }
+
+      const resp = await contratosService.listar(queryParams);
+      const lista = Array.isArray(resp)
+        ? resp
         : resp?.data?.results || resp?.results || resp?.data || [];
       setContratos(Array.isArray(lista) ? lista : []);
     } catch (err) {
@@ -663,7 +680,16 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                     >
                       <option value="">Selecione...</option>
                       {contratos
-                        .filter(c => !isAdmin || !novoTicket.cliente_id || c.cliente_id === novoTicket.cliente_id)
+                        .filter((c) => {
+                          if (!isAdmin || !novoTicket.cliente_id) return true;
+                          const clienteSel = clientes.find((cl) => cl.id === novoTicket.cliente_id);
+                          const empresaId = getEmpresaId(clienteSel?.empresa);
+                          // Aceita contrato da empresa OU directamente do cliente
+                          return (
+                            (empresaId && (c.empresa_id === empresaId || getEmpresaId(c.empresa) === empresaId)) ||
+                            c.cliente_id === novoTicket.cliente_id
+                          );
+                        })
                         .map(c => (
                         <option key={c.id} value={c.id}>
                           {isCliente 
