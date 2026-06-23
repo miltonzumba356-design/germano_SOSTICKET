@@ -8,6 +8,7 @@ import {
   Settings,
   User,
   Building2,
+  Monitor,
   LucideIcon
 } from 'lucide-react';
 
@@ -53,6 +54,11 @@ export const adminMenu: MenuItem[] = [
     id: 'relatorios',
     label: 'Relatórios',
     icon: BarChart3,
+  },
+  {
+    id: 'capturas',
+    label: 'Capturas de Ecrã',
+    icon: Monitor,
   },
   {
     id: 'configuracoes',

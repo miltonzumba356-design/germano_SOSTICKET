@@ -14,6 +14,7 @@ import { Perfil } from './components/Perfil';
 import { Horas } from './components/Horas';
 import { Calendario } from './components/Calendario';
 import { Register } from './components/Register';
+import { Capturas } from './components/Capturas';
 
 // Componente principal da aplicação que gerencia as rotas
 function AppContent() {
@@ -92,6 +93,11 @@ function AppContent() {
     // Perfil handles
     if (paginaAtual === 'perfil' || paginaAtual.startsWith('perfil_')) {
       return <Perfil />;
+    }
+
+    // Capturas handles (apenas admin)
+    if (paginaAtual === 'capturas' || paginaAtual.startsWith('capturas_')) {
+      return <Capturas />;
     }
 
     return <Dashboard />;
