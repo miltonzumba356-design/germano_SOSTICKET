@@ -15,6 +15,8 @@ import {
   Clock,
   Image,
   ArrowLeft,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 
 const SCREENSHOTS_API = 'https://germano-production.up.railway.app';
@@ -31,15 +33,12 @@ interface Captura {
   url: string;
   filename: string;
   username: string;
+  public_id?: string;
   timestamp?: string;
   date?: string;
 }
 
-interface CapturasResponse {
-  username: string;
-  screenshots: Captura[];
-  total?: number;
-}
+// ── API helpers ─────────────────────────────────────────────────────────────
 
 async function buscarUtilizadores(): Promise<UtilizadorAPI[]> {
   const res = await fetch(`${SCREENSHOTS_API}/users`, { headers: { accept: 'application/json' } });
@@ -54,20 +53,41 @@ async function buscarUtilizadores(): Promise<UtilizadorAPI[]> {
 }
 
 async function buscarCapturas(username: string, data?: string): Promise<Captura[]> {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams({ username });
   if (data) params.set('data', data);
-  const query = params.toString() ? `?${params.toString()}` : '';
-  const url = `${SCREENSHOTS_API}/screenshots/${encodeURIComponent(username)}${query}`;
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
+  const res = await fetch(`${SCREENSHOTS_API}/screenshots?${params}`, {
+    headers: { accept: 'application/json' },
+  });
   if (!res.ok) {
     if (res.status === 404) return [];
     throw new Error(`Erro ${res.status} ao buscar capturas de ${username}`);
   }
-  const json: CapturasResponse | Captura[] = await res.json();
+  const json = await res.json();
   if (Array.isArray(json)) return json;
-  if (json && typeof json === 'object' && 'screenshots' in json) return json.screenshots ?? [];
+  if (json && typeof json === 'object') {
+    const arr = json.screenshots ?? json.data ?? json.results;
+    if (Array.isArray(arr)) return arr;
+  }
   return [];
 }
+
+async function eliminarCaptura(public_id: string): Promise<void> {
+  const res = await fetch(`${SCREENSHOTS_API}/screenshots/${encodeURIComponent(public_id)}`, {
+    method: 'DELETE',
+    headers: { accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Erro ${res.status} ao eliminar captura`);
+}
+
+async function eliminarTodasCapturas(username?: string): Promise<void> {
+  const url = username
+    ? `${SCREENSHOTS_API}/screenshots?username=${encodeURIComponent(username)}`
+    : `${SCREENSHOTS_API}/screenshots`;
+  const res = await fetch(url, { method: 'DELETE', headers: { accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Erro ${res.status} ao eliminar capturas`);
+}
+
+// ── Utilitários ──────────────────────────────────────────────────────────────
 
 function extrairUsername(u: UtilizadorAPI): string {
   return (u.username ?? u.name ?? u.email ?? String(u.id ?? '')).trim();
@@ -84,30 +104,41 @@ function extrairDataHora(c: Captura): string {
   return c.timestamp || c.date || '';
 }
 
+// ── Componente ───────────────────────────────────────────────────────────────
+
+type ConfirmacaoEliminar =
+  | { tipo: 'captura'; captura: Captura }
+  | { tipo: 'todas'; username: string };
+
 export function Capturas() {
-  // --- estado de utilizadores ---
+  // utilizadores
   const [utilizadores, setUtilizadores] = useState<UtilizadorAPI[]>([]);
   const [carregandoUsers, setCarregandoUsers] = useState(true);
   const [erroUsers, setErroUsers] = useState('');
   const [buscaUser, setBuscaUser] = useState('');
 
-  // --- estado de capturas ---
+  // capturas
   const [userSelecionado, setUserSelecionado] = useState<string | null>(null);
   const [filtroData, setFiltroData] = useState('');
   const [capturas, setCapturas] = useState<Captura[]>([]);
   const [carregandoCapturas, setCarregandoCapturas] = useState(false);
   const [erroCapturas, setErroCapturas] = useState('');
 
-  // --- lightbox ---
+  // eliminação
+  const [confirmacao, setConfirmacao] = useState<ConfirmacaoEliminar | null>(null);
+  const [eliminando, setEliminando] = useState(false);
+  const [erroEliminar, setErroEliminar] = useState('');
+
+  // lightbox
   const [imagemAmpliada, setImagemAmpliada] = useState<number | null>(null);
 
-  // Carrega utilizadores ao montar
+  // ── carregamento ──────────────────────────────────────────────────────────
+
   const carregarUtilizadores = useCallback(async () => {
     setCarregandoUsers(true);
     setErroUsers('');
     try {
-      const lista = await buscarUtilizadores();
-      setUtilizadores(lista);
+      setUtilizadores(await buscarUtilizadores());
     } catch (e: any) {
       setErroUsers(e?.message || 'Não foi possível carregar os utilizadores.');
     } finally {
@@ -117,14 +148,12 @@ export function Capturas() {
 
   useEffect(() => { carregarUtilizadores(); }, [carregarUtilizadores]);
 
-  // Carrega capturas quando muda utilizador ou filtro de data
   const carregarCapturas = useCallback(async (user: string, data: string) => {
     setCarregandoCapturas(true);
     setErroCapturas('');
     setCapturas([]);
     try {
-      const resultado = await buscarCapturas(user, data || undefined);
-      setCapturas(resultado);
+      setCapturas(await buscarCapturas(user, data || undefined));
     } catch (e: any) {
       setErroCapturas(e?.message || 'Não foi possível carregar as capturas.');
     } finally {
@@ -135,6 +164,8 @@ export function Capturas() {
   useEffect(() => {
     if (userSelecionado) carregarCapturas(userSelecionado, filtroData);
   }, [userSelecionado, filtroData, carregarCapturas]);
+
+  // ── navegação ─────────────────────────────────────────────────────────────
 
   const selecionarUser = (user: string) => {
     setUserSelecionado(user);
@@ -150,29 +181,56 @@ export function Capturas() {
     setImagemAmpliada(null);
   };
 
-  // Lightbox — navegação por teclado
   const irParaAnterior = () => setImagemAmpliada((i) => (i !== null && i > 0 ? i - 1 : i));
   const irParaProxima  = () => setImagemAmpliada((i) => (i !== null && i < capturas.length - 1 ? i + 1 : i));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (confirmacao) return; // não navega se modal de confirmação estiver aberto
       if (imagemAmpliada === null) return;
-      if (e.key === 'Escape')      setImagemAmpliada(null);
-      if (e.key === 'ArrowLeft')   irParaAnterior();
-      if (e.key === 'ArrowRight')  irParaProxima();
+      if (e.key === 'Escape')     setImagemAmpliada(null);
+      if (e.key === 'ArrowLeft')  irParaAnterior();
+      if (e.key === 'ArrowRight') irParaProxima();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [imagemAmpliada, capturas.length]);
+  }, [imagemAmpliada, capturas.length, confirmacao]);
 
-  const utilizadoresFiltrados = utilizadores.filter((u) => {
-    const nome = extrairUsername(u).toLowerCase();
-    return nome.includes(buscaUser.toLowerCase());
-  });
+  // ── eliminação ────────────────────────────────────────────────────────────
 
-  // ────────────────────────────────────────────────────────────────
-  // RENDER
-  // ────────────────────────────────────────────────────────────────
+  const confirmarEliminar = (item: ConfirmacaoEliminar) => {
+    setErroEliminar('');
+    setConfirmacao(item);
+  };
+
+  const executarEliminar = async () => {
+    if (!confirmacao) return;
+    setEliminando(true);
+    setErroEliminar('');
+    try {
+      if (confirmacao.tipo === 'captura') {
+        const pid = confirmacao.captura.public_id || confirmacao.captura.filename;
+        await eliminarCaptura(pid);
+        setCapturas((prev) => prev.filter((c) => c !== confirmacao.captura));
+      } else {
+        await eliminarTodasCapturas(confirmacao.username);
+        setCapturas([]);
+      }
+      setConfirmacao(null);
+      setImagemAmpliada(null);
+    } catch (e: any) {
+      setErroEliminar(e?.message || 'Erro ao eliminar. Tente novamente.');
+    } finally {
+      setEliminando(false);
+    }
+  };
+
+  const utilizadoresFiltrados = utilizadores.filter((u) =>
+    extrairUsername(u).toLowerCase().includes(buscaUser.toLowerCase())
+  );
+
+  // ── render ────────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-6">
 
@@ -202,7 +260,7 @@ export function Capturas() {
         </div>
 
         {userSelecionado ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => carregarCapturas(userSelecionado, filtroData)}
               disabled={carregandoCapturas}
@@ -211,6 +269,15 @@ export function Capturas() {
               <RefreshCw className={`w-4 h-4 ${carregandoCapturas ? 'animate-spin' : ''}`} />
               Atualizar
             </button>
+            {capturas.length > 0 && (
+              <button
+                onClick={() => confirmarEliminar({ tipo: 'todas', username: userSelecionado })}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar todas
+              </button>
+            )}
             <button
               onClick={voltarParaLista}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -231,10 +298,9 @@ export function Capturas() {
         )}
       </div>
 
-      {/* ── VISTA: lista de utilizadores ── */}
+      {/* ── Lista de utilizadores ── */}
       {!userSelecionado && (
         <div className="space-y-4">
-          {/* Barra de pesquisa na lista */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -246,17 +312,13 @@ export function Capturas() {
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
               {buscaUser && (
-                <button
-                  onClick={() => setBuscaUser('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
+                <button onClick={() => setBuscaUser('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   <X className="w-4 h-4" />
                 </button>
               )}
             </div>
           </div>
 
-          {/* Erro ao carregar utilizadores */}
           {erroUsers && (
             <div className="bg-white rounded-xl border border-red-200 p-5">
               <div className="flex items-center gap-3 text-red-600">
@@ -266,7 +328,6 @@ export function Capturas() {
             </div>
           )}
 
-          {/* Carregando utilizadores */}
           {carregandoUsers && (
             <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
               <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mx-auto mb-4" />
@@ -274,60 +335,52 @@ export function Capturas() {
             </div>
           )}
 
-          {/* Lista de utilizadores */}
           {!carregandoUsers && !erroUsers && (
-            <>
-              {utilizadoresFiltrados.length === 0 ? (
-                <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
-                  <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 font-medium">Nenhum utilizador encontrado</p>
+            utilizadoresFiltrados.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
+                <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 font-medium">Nenhum utilizador encontrado</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-500 px-1">
+                  <span className="font-semibold text-gray-800">{utilizadoresFiltrados.length}</span> utilizador{utilizadoresFiltrados.length !== 1 ? 'es' : ''} — clique para ver as capturas
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {utilizadoresFiltrados.map((u, i) => {
+                    const nome = extrairUsername(u);
+                    const email = typeof u.email === 'string' ? u.email : '';
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => selecionarUser(nome)}
+                        className="bg-white rounded-xl border border-gray-200 p-5 text-left hover:border-indigo-300 hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
+                            <User className="w-6 h-6 text-indigo-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{nome}</p>
+                            {email && <p className="text-xs text-gray-400 truncate">{email}</p>}
+                          </div>
+                        </div>
+                        <div className="mt-4">
+                          <span className="text-xs text-indigo-500 font-medium group-hover:text-indigo-700">Ver capturas →</span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-500 px-1">
-                    <span className="font-semibold text-gray-800">{utilizadoresFiltrados.length}</span> utilizador{utilizadoresFiltrados.length !== 1 ? 'es' : ''} — clique para ver as capturas
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {utilizadoresFiltrados.map((u, i) => {
-                      const nome = extrairUsername(u);
-                      const email = typeof u.email === 'string' ? u.email : '';
-                      return (
-                        <button
-                          key={i}
-                          onClick={() => selecionarUser(nome)}
-                          className="bg-white rounded-xl border border-gray-200 p-5 text-left hover:border-indigo-300 hover:shadow-md transition-all group"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
-                              <User className="w-6 h-6 text-indigo-500" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-gray-900 truncate">{nome}</p>
-                              {email && (
-                                <p className="text-xs text-gray-400 truncate">{email}</p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="mt-4 flex items-center justify-between">
-                            <span className="text-xs text-indigo-500 font-medium group-hover:text-indigo-700">
-                              Ver capturas →
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </>
+              </>
+            )
           )}
         </div>
       )}
 
-      {/* ── VISTA: capturas do utilizador selecionado ── */}
+      {/* ── Capturas do utilizador ── */}
       {userSelecionado && (
         <div className="space-y-4">
-
           {/* Filtro de data */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
@@ -359,7 +412,6 @@ export function Capturas() {
             </div>
           </div>
 
-          {/* Carregando capturas */}
           {carregandoCapturas && (
             <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
               <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mx-auto mb-4" />
@@ -367,7 +419,6 @@ export function Capturas() {
             </div>
           )}
 
-          {/* Erro capturas */}
           {erroCapturas && !carregandoCapturas && (
             <div className="bg-white rounded-xl border border-red-200 p-5">
               <div className="flex items-center gap-3 text-red-600">
@@ -377,7 +428,6 @@ export function Capturas() {
             </div>
           )}
 
-          {/* Sem capturas */}
           {!carregandoCapturas && !erroCapturas && capturas.length === 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
               <Image className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -409,13 +459,23 @@ export function Capturas() {
                           alt={captura.filename || `Captura ${index + 1}`}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                         />
-                        <button
-                          onClick={() => setImagemAmpliada(index)}
-                          className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all"
-                          aria-label="Ampliar imagem"
-                        >
-                          <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
-                        </button>
+                        {/* Overlay: ampliar + eliminar */}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-3">
+                          <button
+                            onClick={() => setImagemAmpliada(index)}
+                            className="p-2 bg-white/20 backdrop-blur-sm text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/30"
+                            aria-label="Ampliar"
+                          >
+                            <ZoomIn className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); confirmarEliminar({ tipo: 'captura', captura }); }}
+                            className="p-2 bg-red-500/80 backdrop-blur-sm text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                            aria-label="Eliminar captura"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
                       <div className="p-3 space-y-1">
                         <p className="text-xs font-medium text-gray-800 truncate" title={captura.filename}>
@@ -437,58 +497,105 @@ export function Capturas() {
         </div>
       )}
 
-      {/* Lightbox */}
+      {/* ── Lightbox ── */}
       {imagemAmpliada !== null && capturas[imagemAmpliada] && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
           onClick={() => setImagemAmpliada(null)}
         >
-          <button
-            onClick={() => setImagemAmpliada(null)}
-            className="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
-          >
+          <button onClick={() => setImagemAmpliada(null)} className="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors">
             <X className="w-6 h-6" />
           </button>
 
+          {/* Eliminar no lightbox */}
+          <button
+            onClick={(e) => { e.stopPropagation(); confirmarEliminar({ tipo: 'captura', captura: capturas[imagemAmpliada] }); }}
+            className="absolute top-4 right-16 p-2 text-white bg-red-600/70 hover:bg-red-600 rounded-lg transition-colors"
+            title="Eliminar esta captura"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+
           {imagemAmpliada > 0 && (
-            <button
-              onClick={(e) => { e.stopPropagation(); irParaAnterior(); }}
-              className="absolute left-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
-            >
+            <button onClick={(e) => { e.stopPropagation(); irParaAnterior(); }} className="absolute left-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors">
               <ChevronLeft className="w-8 h-8" />
             </button>
           )}
-
           {imagemAmpliada < capturas.length - 1 && (
-            <button
-              onClick={(e) => { e.stopPropagation(); irParaProxima(); }}
-              className="absolute right-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
-            >
+            <button onClick={(e) => { e.stopPropagation(); irParaProxima(); }} className="absolute right-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors">
               <ChevronRight className="w-8 h-8" />
             </button>
           )}
 
-          <div
-            className="max-w-5xl max-h-[85vh] flex flex-col items-center gap-3"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="max-w-5xl max-h-[85vh] flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
             <img
               src={capturas[imagemAmpliada].url}
               alt={capturas[imagemAmpliada].filename}
               className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl"
             />
             <div className="text-center">
-              <p className="text-white text-sm font-medium">
-                {capturas[imagemAmpliada].filename || `Captura ${imagemAmpliada + 1}`}
-              </p>
+              <p className="text-white text-sm font-medium">{capturas[imagemAmpliada].filename || `Captura ${imagemAmpliada + 1}`}</p>
               {extrairDataHora(capturas[imagemAmpliada]) && (
-                <p className="text-gray-400 text-xs mt-1">
-                  {formatarDataHora(extrairDataHora(capturas[imagemAmpliada]))}
+                <p className="text-gray-400 text-xs mt-1">{formatarDataHora(extrairDataHora(capturas[imagemAmpliada]))}</p>
+              )}
+              <p className="text-gray-500 text-xs mt-1">{imagemAmpliada + 1} / {capturas.length}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal de confirmação de eliminação ── */}
+      {confirmacao && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="p-6 bg-red-600 text-white flex items-center gap-3">
+              <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+              <div>
+                <p className="font-black text-lg">Confirmar eliminação</p>
+                <p className="text-red-100 text-sm">Esta acção é irreversível</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {confirmacao.tipo === 'captura' ? (
+                <p className="text-gray-700 text-sm">
+                  Tem a certeza que pretende eliminar a captura{' '}
+                  <strong className="text-gray-900">{confirmacao.captura.filename || 'selecionada'}</strong>?
+                </p>
+              ) : (
+                <p className="text-gray-700 text-sm">
+                  Tem a certeza que pretende eliminar <strong className="text-gray-900">todas as capturas</strong> do utilizador{' '}
+                  <strong className="text-gray-900">{confirmacao.username}</strong>?
                 </p>
               )}
-              <p className="text-gray-500 text-xs mt-1">
-                {imagemAmpliada + 1} / {capturas.length}
-              </p>
+
+              {erroEliminar && (
+                <div className="flex items-center gap-2 text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{erroEliminar}</span>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => { setConfirmacao(null); setErroEliminar(''); }}
+                  disabled={eliminando}
+                  className="flex-1 py-3 text-sm font-bold text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={executarEliminar}
+                  disabled={eliminando}
+                  className="flex-1 py-3 text-sm font-black text-white bg-red-600 rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {eliminando ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> A eliminar...</>
+                  ) : (
+                    <><Trash2 className="w-4 h-4" /> Eliminar</>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
