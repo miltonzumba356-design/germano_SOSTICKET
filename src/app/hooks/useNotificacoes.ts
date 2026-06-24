@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { notificacoesService } from '../services/api';
 import { Notificacao } from '../types/api';
+import { realtime } from '../lib/realtime';
 
 const INTERVALO_POLL_MS    = 5000;
 const REPETICOES_SOM       = 5;   // toca 5 vezes
@@ -142,6 +143,10 @@ export function useNotificacoes(usuarioId?: string) {
         if (novas.length > 0) {
           // Inicia sequência de 5 sons
           iniciarSequenciaSom();
+
+          // Propaga invalidação para que Dashboard e Intervencoes recarreguem
+          realtime.invalidate('dashboard');
+          realtime.invalidate('intervencoes');
 
           // Alerta do SO se o browser estiver em background
           if (document.hidden) {

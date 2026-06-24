@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react';
+import { useRealtimeSignal } from '../hooks/useRealtimeSignal';
 import type { ReactNode } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -243,8 +244,8 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
   const [menuAberto, setMenuAberto] = useState<string | null>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
 
-  const carregarDados = async () => {
-    setCarregando(true);
+  const carregarDados = async (silencioso = false) => {
+    if (!silencioso) setCarregando(true);
     setErro('');
 
     try {
@@ -310,6 +311,9 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
   useEffect(() => {
     carregarDados();
   }, [usuario?.perfil]);
+
+  // Real-time: atualiza silenciosamente a cada 30 s e quando outra aba invalida
+  useRealtimeSignal('dashboard', () => carregarDados(true), { interval: 30_000 });
 
   const tituloDashboard = isAdmin ? 'Dashboard Administrativo' : isTecnico ? 'Dashboard do Técnico' : 'Painel do Cliente';
   const subtituloDashboard = isAdmin 

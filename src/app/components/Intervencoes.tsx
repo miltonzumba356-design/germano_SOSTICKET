@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { useRealtimeSignal } from '../hooks/useRealtimeSignal';
 import { Intervencao } from '../types/api';
 import type { Cliente } from '../types/api';
 import { intervencoesService, contratosService, clientesService, tecnicosService } from '../services/api';
@@ -164,8 +165,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
     data_fim_intervencao: '',
   });
 
-  const carregarIntervencoes = async () => {
-    setCarregando(true);
+  const carregarIntervencoes = async (silencioso = false) => {
+    if (!silencioso) setCarregando(true);
     setErro('');
     try {
       const isTecnicoPerfil = usuario?.perfil === 'tecnico';
@@ -310,6 +311,9 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
       carregarContratos();
     }
   }, [novoTicket.cliente_id, isAdmin]);
+
+  // Real-time: atualiza a lista silenciosamente a cada 15 s e on cross-tab invalidate
+  useRealtimeSignal('intervencoes', () => carregarIntervencoes(true), { interval: 15_000 });
 
   const abrirModalAtribuir = (intervencao: Intervencao) => {
     setIntervencaoAtribuir(intervencao);
