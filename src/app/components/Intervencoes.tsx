@@ -5,15 +5,15 @@ import { intervencoesService, contratosService, clientesService, tecnicosService
 import { useAuth } from '../contexts/AuthContext';
 import { useCronometro } from '../contexts/CronometroContext';
 import { formatarHoras } from '../utils/formatters';
-import { 
-  Search, 
-  Plus, 
-  User, 
-  Clock, 
-  AlertCircle, 
-  Loader2, 
-  Filter, 
-  ChevronLeft, 
+import {
+  Search,
+  Plus,
+  User,
+  Clock,
+  AlertCircle,
+  Loader2,
+  Filter,
+  ChevronLeft,
   ChevronRight,
   MoreVertical,
   MessageSquare,
@@ -25,7 +25,12 @@ import {
   Camera,
   ArrowRight,
   ShieldCheck,
-  FileText
+  FileText,
+  Eye,
+  Film,
+  ZoomIn,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
 } from 'lucide-react';
 
 function getEmpresaNome(empresa: Cliente['empresa']) {
@@ -64,6 +69,21 @@ function getHorasRegistadas(intervencao: Intervencao) {
   const horasPorDatas = (fim - inicio) / 3600000;
   const arredondado = Number(horasPorDatas.toFixed(2));
   return arredondado === 0 ? 0.01 : arredondado;
+}
+
+type TipoAnexo = 'imagem' | 'pdf' | 'video' | 'outro';
+
+function detectarTipoAnexo(url: string): TipoAnexo {
+  const semQuery = (url || '').split('?')[0].split('#')[0].toLowerCase();
+  const ext = semQuery.split('.').pop() || '';
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'].includes(ext)) return 'imagem';
+  if (ext === 'pdf') return 'pdf';
+  if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+  // Cloudinary pode não ter extensão — inferir por path (image/, video/, raw/)
+  if (semQuery.includes('/image/')) return 'imagem';
+  if (semQuery.includes('/video/')) return 'video';
+  if (semQuery.includes('.pdf')) return 'pdf';
+  return 'outro';
 }
 
 const FLUXO_STATUS_INTERVENCAO = ['aberto', 'em_andamento', 'concluido', 'fechado'];
@@ -120,6 +140,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const [intervencaoDetalhe, setIntervencaoDetalhe] = useState<Intervencao | null>(null);
   const [novoComentario, setNovoComentario] = useState('');
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
+  const [visualizadorAnexo, setVisualizadorAnexo] = useState<{ url: string; nome: string; lista: { url: string; nome: string }[]; indice: number } | null>(null);
   const [exibirModalAtribuir, setExibirModalAtribuir] = useState(false);
   const [intervencaoAtribuir, setIntervencaoAtribuir] = useState<Intervencao | null>(null);
   const [tecnicoSelecionado, setTecnicoSelecionado] = useState('');
@@ -260,6 +281,22 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
       carregarTecnicos();
     }
   }, [isAdmin, exibirModalNovo]);
+
+  // Navegação por teclado no visualizador de anexos
+  useEffect(() => {
+    if (!visualizadorAnexo) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setVisualizadorAnexo(null); return; }
+      if (e.key === 'ArrowLeft') {
+        setVisualizadorAnexo((v) => v && v.indice > 0 ? { ...v, url: v.lista[v.indice - 1].url, nome: v.lista[v.indice - 1].nome, indice: v.indice - 1 } : v);
+      }
+      if (e.key === 'ArrowRight') {
+        setVisualizadorAnexo((v) => v && v.indice < v.lista.length - 1 ? { ...v, url: v.lista[v.indice + 1].url, nome: v.lista[v.indice + 1].nome, indice: v.indice + 1 } : v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [!!visualizadorAnexo]);
   
   // Auto-selecionar contrato se houver apenas um para o cliente
   useEffect(() => {
@@ -1189,24 +1226,55 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                       Anexos ({intervencaoDetalhe.anexos?.length || 0})
                     </h4>
                     <div className="grid grid-cols-2 gap-3">
-                      {intervencaoDetalhe.anexos?.map((anexo, i) => (
-                        <a 
-                          key={i}
-                          href={anexo.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-3 bg-white border border-gray-100 rounded-2xl hover:border-theme-primary transition-all group shadow-sm"
-                        >
-                          {anexo.nome_arquivo.match(/\.(jpg|jpeg|png|gif)$/i) ? (
-                            <img src={anexo.url} alt={anexo.nome_arquivo} className="w-full h-16 object-cover rounded-lg mb-2" />
-                          ) : (
-                            <div className="w-full h-16 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 group-hover:text-theme-primary mb-2">
-                              <FileText className="w-6 h-6" />
-                            </div>
-                          )}
-                          <p className="text-[10px] font-bold text-gray-600 truncate">{anexo.nome_arquivo}</p>
-                        </a>
-                      ))}
+                      {intervencaoDetalhe.anexos?.map((anexo, i) => {
+                        const listaAnexos = (intervencaoDetalhe.anexos || []).map((a: any) => ({ url: a.url, nome: a.nome_arquivo }));
+                        const tipo = detectarTipoAnexo(anexo.url);
+                        const thumb = tipo === 'imagem' ? (
+                          <img src={anexo.url} alt={anexo.nome_arquivo} className="w-full h-16 object-cover rounded-lg mb-2 pointer-events-none" draggable={false} />
+                        ) : tipo === 'pdf' ? (
+                          <div className="w-full h-16 bg-red-50 rounded-lg flex items-center justify-center text-red-400 group-hover:text-red-500 mb-2">
+                            <FileText className="w-6 h-6" />
+                          </div>
+                        ) : tipo === 'video' ? (
+                          <div className="w-full h-16 bg-purple-50 rounded-lg flex items-center justify-center text-purple-400 group-hover:text-purple-500 mb-2">
+                            <Film className="w-6 h-6" />
+                          </div>
+                        ) : (
+                          <div className="w-full h-16 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 group-hover:text-theme-primary mb-2">
+                            <Paperclip className="w-6 h-6" />
+                          </div>
+                        );
+
+                        if (isTecnico) {
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setVisualizadorAnexo({ url: anexo.url, nome: anexo.nome_arquivo, lista: listaAnexos, indice: i })}
+                              className="p-3 bg-white border border-gray-100 rounded-2xl hover:border-theme-primary transition-all group shadow-sm w-full text-left relative"
+                            >
+                              {thumb}
+                              <p className="text-[10px] font-bold text-gray-600 truncate">{anexo.nome_arquivo}</p>
+                              <span className="absolute top-2 right-2 bg-indigo-100 text-indigo-600 rounded-lg p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Eye className="w-3 h-3" />
+                              </span>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <a
+                            key={i}
+                            href={anexo.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-3 bg-white border border-gray-100 rounded-2xl hover:border-theme-primary transition-all group shadow-sm"
+                          >
+                            {thumb}
+                            <p className="text-[10px] font-bold text-gray-600 truncate">{anexo.nome_arquivo}</p>
+                          </a>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -1388,6 +1456,124 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* ── Visualizador de Anexos (Técnico) ── */}
+      {visualizadorAnexo && (
+        <div
+          className="fixed inset-0 z-[9000] bg-black/95 flex flex-col select-none"
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {/* Cabeçalho */}
+          <div className="flex items-center justify-between px-4 py-3 bg-gray-900/80 backdrop-blur-sm border-b border-white/10 flex-shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <Eye className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+              <p className="text-sm font-medium text-white truncate">{visualizadorAnexo.nome}</p>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+              <span className="text-xs text-gray-400">
+                {visualizadorAnexo.indice + 1} / {visualizadorAnexo.lista.length}
+              </span>
+              <button
+                onClick={() => setVisualizadorAnexo(null)}
+                className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                aria-label="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Conteúdo */}
+          <div className="flex-1 overflow-hidden flex items-center justify-center relative">
+            {/* Anterior */}
+            {visualizadorAnexo.indice > 0 && (
+              <button
+                onClick={() => setVisualizadorAnexo((v) => v ? { ...v, url: v.lista[v.indice - 1].url, nome: v.lista[v.indice - 1].nome, indice: v.indice - 1 } : null)}
+                className="absolute left-3 z-10 p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <ChevronLeftIcon className="w-8 h-8" />
+              </button>
+            )}
+
+            {/* Próximo */}
+            {visualizadorAnexo.indice < visualizadorAnexo.lista.length - 1 && (
+              <button
+                onClick={() => setVisualizadorAnexo((v) => v ? { ...v, url: v.lista[v.indice + 1].url, nome: v.lista[v.indice + 1].nome, indice: v.indice + 1 } : null)}
+                className="absolute right-3 z-10 p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <ChevronRightIcon className="w-8 h-8" />
+              </button>
+            )}
+
+            {/* Imagem */}
+            {detectarTipoAnexo(visualizadorAnexo.url) === 'imagem' && (
+              <img
+                src={visualizadorAnexo.url}
+                alt={visualizadorAnexo.nome}
+                className="max-h-full max-w-full object-contain px-14"
+                draggable={false}
+                onContextMenu={(e) => e.preventDefault()}
+              />
+            )}
+
+            {/* PDF — iframe com toolbar oculta e sem download */}
+            {detectarTipoAnexo(visualizadorAnexo.url) === 'pdf' && (
+              <iframe
+                key={visualizadorAnexo.url}
+                src={`${visualizadorAnexo.url}#toolbar=0&navpanes=0&scrollbar=1&statusbar=0&messages=0`}
+                className="w-full h-full border-0"
+                title={visualizadorAnexo.nome}
+                sandbox="allow-same-origin allow-scripts allow-forms"
+              />
+            )}
+
+            {/* Vídeo — sem opção de download */}
+            {detectarTipoAnexo(visualizadorAnexo.url) === 'video' && (
+              <video
+                key={visualizadorAnexo.url}
+                src={visualizadorAnexo.url}
+                controls
+                controlsList="nodownload nofullscreen"
+                className="max-h-full max-w-full px-14"
+                onContextMenu={(e) => e.preventDefault()}
+                disablePictureInPicture
+              />
+            )}
+
+            {/* Tipo desconhecido */}
+            {detectarTipoAnexo(visualizadorAnexo.url) === 'outro' && (
+              <div className="text-center px-8">
+                <Paperclip className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                <p className="text-white font-medium">{visualizadorAnexo.nome}</p>
+                <p className="text-gray-400 text-sm mt-2">Pré-visualização não disponível para este tipo de ficheiro.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Miniaturas na base (quando há mais de 1 anexo) */}
+          {visualizadorAnexo.lista.length > 1 && (
+            <div className="flex-shrink-0 bg-gray-900/60 backdrop-blur-sm border-t border-white/10 px-4 py-2 flex gap-2 overflow-x-auto">
+              {visualizadorAnexo.lista.map((item, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setVisualizadorAnexo((v) => v ? { ...v, url: item.url, nome: item.nome, indice: idx } : null)}
+                  className={`flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border-2 transition-colors ${
+                    idx === visualizadorAnexo.indice ? 'border-indigo-400' : 'border-transparent hover:border-white/30'
+                  }`}
+                >
+                  {detectarTipoAnexo(item.url) === 'imagem' ? (
+                    <img src={item.url} alt={item.nome} className="w-full h-full object-cover" draggable={false} onContextMenu={(e) => e.preventDefault()} />
+                  ) : (
+                    <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+                      {detectarTipoAnexo(item.url) === 'pdf' ? <FileText className="w-5 h-5 text-red-400" /> : detectarTipoAnexo(item.url) === 'video' ? <Film className="w-5 h-5 text-purple-400" /> : <Paperclip className="w-5 h-5 text-gray-400" />}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
