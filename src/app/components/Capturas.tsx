@@ -31,9 +31,13 @@ interface UtilizadorAPI {
 
 interface Captura {
   url: string;
-  filename: string;
-  username: string;
-  public_id?: string;
+  public_id: string;
+  created_at?: string;
+  width?: number;
+  height?: number;
+  // campos opcionais que a API pode ou não devolver
+  filename?: string;
+  username?: string;
   timestamp?: string;
   date?: string;
 }
@@ -63,11 +67,12 @@ async function buscarCapturas(username: string, data?: string): Promise<Captura[
     throw new Error(`Erro ${res.status} ao buscar capturas de ${username}`);
   }
   const json = await res.json();
-  if (Array.isArray(json)) return json;
+  // Resposta: { username, total, images: [...] }
   if (json && typeof json === 'object') {
-    const arr = json.screenshots ?? json.data ?? json.results;
+    const arr = json.images ?? json.screenshots ?? json.data ?? json.results;
     if (Array.isArray(arr)) return arr;
   }
+  if (Array.isArray(json)) return json;
   return [];
 }
 
@@ -101,7 +106,14 @@ function formatarDataHora(valor?: string): string {
 }
 
 function extrairDataHora(c: Captura): string {
-  return c.timestamp || c.date || '';
+  return c.created_at || c.timestamp || c.date || '';
+}
+
+function extrairNomeFicheiro(c: Captura): string {
+  if (c.filename) return c.filename;
+  // public_id = "screenshots/HUNTER_20260624_094524" → "HUNTER_20260624_094524"
+  const partes = (c.public_id || '').split('/');
+  return partes[partes.length - 1] || c.public_id || 'captura';
 }
 
 // ── Componente ───────────────────────────────────────────────────────────────
@@ -448,15 +460,16 @@ export function Capturas() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {capturas.map((captura, index) => {
                   const dataHora = extrairDataHora(captura);
+                  const nome = extrairNomeFicheiro(captura);
                   return (
                     <div
-                      key={index}
+                      key={captura.public_id || index}
                       className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-indigo-200 transition-all group"
                     >
                       <div className="relative bg-gray-100 aspect-video overflow-hidden">
                         <img
                           src={captura.url}
-                          alt={captura.filename || `Captura ${index + 1}`}
+                          alt={nome}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                         />
                         {/* Overlay: ampliar + eliminar */}
@@ -478,9 +491,7 @@ export function Capturas() {
                         </div>
                       </div>
                       <div className="p-3 space-y-1">
-                        <p className="text-xs font-medium text-gray-800 truncate" title={captura.filename}>
-                          {captura.filename || `Captura ${index + 1}`}
-                        </p>
+                        <p className="text-xs font-medium text-gray-800 truncate" title={nome}>{nome}</p>
                         {dataHora && (
                           <div className="flex items-center gap-1 text-xs text-gray-400">
                             <Clock className="w-3 h-3" />
@@ -530,11 +541,11 @@ export function Capturas() {
           <div className="max-w-5xl max-h-[85vh] flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
             <img
               src={capturas[imagemAmpliada].url}
-              alt={capturas[imagemAmpliada].filename}
+              alt={extrairNomeFicheiro(capturas[imagemAmpliada])}
               className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl"
             />
             <div className="text-center">
-              <p className="text-white text-sm font-medium">{capturas[imagemAmpliada].filename || `Captura ${imagemAmpliada + 1}`}</p>
+              <p className="text-white text-sm font-medium">{extrairNomeFicheiro(capturas[imagemAmpliada])}</p>
               {extrairDataHora(capturas[imagemAmpliada]) && (
                 <p className="text-gray-400 text-xs mt-1">{formatarDataHora(extrairDataHora(capturas[imagemAmpliada]))}</p>
               )}
@@ -560,7 +571,7 @@ export function Capturas() {
               {confirmacao.tipo === 'captura' ? (
                 <p className="text-gray-700 text-sm">
                   Tem a certeza que pretende eliminar a captura{' '}
-                  <strong className="text-gray-900">{confirmacao.captura.filename || 'selecionada'}</strong>?
+                  <strong className="text-gray-900">{extrairNomeFicheiro(confirmacao.captura)}</strong>?
                 </p>
               ) : (
                 <p className="text-gray-700 text-sm">
