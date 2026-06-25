@@ -3,41 +3,110 @@ import { notificacoesService } from '../services/api';
 import { Notificacao } from '../types/api';
 import { realtime } from '../lib/realtime';
 
-const INTERVALO_POLL_MS    = 5000;
-const REPETICOES_SOM       = 5;   // toca 5 vezes
-const INTERVALO_SOM_MS     = 1000; // 1 segundo entre cada toque
+const INTERVALO_POLL_MS = 5000;
+const REPETICOES_SOM    = 5;
+const INTERVALO_SOM_MS  = 1000;
 
-// ── Som via Web Audio API ─────────────────────────────────────────────────────
-// Três notas ascendentes (acorde de Dó maior — Do/Mi/Sol)
-// Volume alto (0.7) e ataque rápido para ser bem audível
-function tocarSomNotificacao() {
+// ── Motor de áudio ────────────────────────────────────────────────────────────
+//
+// Problemas comuns que silenciam o som em muitos PCs:
+//   1. Browsers bloqueiam AudioContext até ao primeiro gesto do utilizador
+//   2. Criar um novo AudioContext a cada toque → fica suspenso silenciosamente
+//   3. Onda sine é a mais fraca; square é 2-3x mais audível
+//   4. Sem DynamicsCompressor o volume pode ser limitado silenciosamente
+//
+// Solução: singleton + desbloqueio no primeiro gesto + square+sine em camadas + compressor
+
+let _audioCtx: AudioContext | null = null;
+
+function obterCtx(): AudioContext | null {
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-
-    const nota = (freq: number, inicio: number, duracao: number, vol = 0.65) => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      // Envelope: ataque rápido, sustain, decay suave
-      gain.gain.setValueAtTime(0, ctx.currentTime + inicio);
-      gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + inicio + 0.025);
-      gain.gain.setValueAtTime(vol, ctx.currentTime + inicio + duracao - 0.06);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + inicio + duracao);
-      osc.start(ctx.currentTime + inicio);
-      osc.stop(ctx.currentTime + inicio + duracao + 0.01);
-    };
-
-    // Dó5 → Mi5 → Sol5 — som de alerta claro e ascendente
-    nota(523.25, 0.00, 0.18); // C5
-    nota(659.25, 0.22, 0.18); // E5
-    nota(783.99, 0.44, 0.26); // G5
+    const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctor) return null;
+    if (!_audioCtx || _audioCtx.state === 'closed') {
+      _audioCtx = new Ctor();
+    }
+    return _audioCtx;
   } catch {
-    // Web Audio não suportado — silencioso
+    return null;
+  }
+}
+
+// Desbloqueia o contexto na primeira interação — deve ser chamado o mais cedo possível
+function registarDesbloqueioAudio() {
+  const unlock = () => {
+    const ctx = obterCtx();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  };
+  // capture:true garante que apanha o evento antes de qualquer stopPropagation
+  const opts: AddEventListenerOptions = { once: true, capture: true };
+  document.addEventListener('click',       unlock, opts);
+  document.addEventListener('keydown',     unlock, opts);
+  document.addEventListener('pointerdown', unlock, opts);
+  document.addEventListener('touchstart',  unlock, opts);
+}
+
+function tocarSomNotificacao() {
+  const ctx = obterCtx();
+  if (!ctx) return;
+
+  const executar = () => {
+    try {
+      // DynamicsCompressor: maximiza o volume sem clippar
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -20;
+      comp.knee.value      =  10;
+      comp.ratio.value     =  12;
+      comp.attack.value    = 0.001;
+      comp.release.value   = 0.15;
+      comp.connect(ctx.destination);
+
+      // Master gain — perto do máximo seguro
+      const master = ctx.createGain();
+      master.gain.value = 0.9;
+      master.connect(comp);
+
+      // Duas camadas por nota: square (potência/punch) + sine (clareza)
+      const nota = (freq: number, t: number, dur: number) => {
+        (
+          [
+            { type: 'square' as OscillatorType, vol: 0.75 },
+            { type: 'sine'   as OscillatorType, vol: 0.45 },
+          ] as const
+        ).forEach(({ type, vol }) => {
+          const osc  = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(master);
+          osc.type            = type;
+          osc.frequency.value = freq;
+
+          const now = ctx.currentTime;
+          gain.gain.setValueAtTime(0, now + t);
+          gain.gain.linearRampToValueAtTime(vol, now + t + 0.012); // ataque agressivo
+          gain.gain.setValueAtTime(vol, now + t + dur - 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + t + dur);
+          osc.start(now + t);
+          osc.stop(now + t + dur + 0.02);
+        });
+      };
+
+      // A5 → D6 → E6 — faixa 880–1318 Hz, ideal para altifalantes de portáteis e desktops
+      nota(880,  0.00, 0.13);
+      nota(1174, 0.16, 0.13);
+      nota(1318, 0.32, 0.22);
+    } catch {
+      // silencioso em ambientes sem suporte
+    }
+  };
+
+  // Se suspenso (sem gesto prévio) tenta retomar antes de tocar
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(executar).catch(() => {});
+  } else {
+    executar();
   }
 }
 
@@ -67,17 +136,17 @@ async function pedirPermissaoNotificacaoOS() {
 
 // ── Hook principal ─────────────────────────────────────────────────────────────
 export function useNotificacoes(usuarioId?: string) {
-  const [notificacoes, setNotificacoes]             = useState<Notificacao[]>([]);
+  const [notificacoes, setNotificacoes]                   = useState<Notificacao[]>([]);
   const [carregandoNotificacoes, setCarregandoNotificacoes] = useState(false);
 
   // Controlo da sequência de som
-  const somTimerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const somCanceladoRef   = useRef(false);
-  const naoLidasRef       = useRef(0); // espelho em ref para os callbacks de timeout
+  const somTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const somCanceladoRef = useRef(false);
+  const naoLidasRef     = useRef(0);
 
   // Controlo do polling
-  const idsConhecidosRef  = useRef<Set<string>>(new Set());
-  const primeiraVezRef    = useRef(true);
+  const idsConhecidosRef = useRef<Set<string>>(new Set());
+  const primeiraVezRef   = useRef(true);
 
   // ── Sequência de som ─────────────────────────────────────────────────────
 
@@ -90,14 +159,11 @@ export function useNotificacoes(usuarioId?: string) {
   }, []);
 
   const iniciarSequenciaSom = useCallback(() => {
-    // Cancela qualquer sequência anterior antes de iniciar nova
     pararSom();
     somCanceladoRef.current = false;
-
     let repeticoes = 0;
 
     const proximo = () => {
-      // Para se cancelado externamente ou se já não há notificações não lidas
       if (somCanceladoRef.current || naoLidasRef.current === 0) return;
       if (repeticoes >= REPETICOES_SOM) return;
 
@@ -112,15 +178,13 @@ export function useNotificacoes(usuarioId?: string) {
     proximo();
   }, [pararSom]);
 
-  // ── Sincroniza ref com o count de não lidas e para o som quando chega a 0 ──
+  // ── Sincroniza ref e para o som quando não há não-lidas ──────────────────
 
   const naoLidas = notificacoes.filter((n) => !n.lida).length;
 
   useEffect(() => {
     naoLidasRef.current = naoLidas;
-    if (naoLidas === 0) {
-      pararSom();
-    }
+    if (naoLidas === 0) pararSom();
   }, [naoLidas, pararSom]);
 
   // ── Polling ──────────────────────────────────────────────────────────────
@@ -141,14 +205,12 @@ export function useNotificacoes(usuarioId?: string) {
         );
 
         if (novas.length > 0) {
-          // Inicia sequência de 5 sons
           iniciarSequenciaSom();
 
-          // Propaga invalidação para que Dashboard e Intervencoes recarreguem
+          // Invalida dashboard e intervenções para actualizarem silenciosamente
           realtime.invalidate('dashboard');
           realtime.invalidate('intervencoes');
 
-          // Alerta do SO se o browser estiver em background
           if (document.hidden) {
             const primeira = novas[0];
             enviarNotificacaoOS(
@@ -174,8 +236,11 @@ export function useNotificacoes(usuarioId?: string) {
   useEffect(() => {
     if (!usuarioId) return;
 
+    // Desbloqueio de áudio + permissão de notificações OS logo no mount
+    registarDesbloqueioAudio();
     pedirPermissaoNotificacaoOS();
-    primeiraVezRef.current  = true;
+
+    primeiraVezRef.current   = true;
     idsConhecidosRef.current = new Set();
 
     carregarNotificacoes();
@@ -193,7 +258,6 @@ export function useNotificacoes(usuarioId?: string) {
     try {
       await notificacoesService.marcarLida(id);
       setNotificacoes((prev) => prev.map((n) => (n.id === id ? { ...n, lida: true } : n)));
-      // O useEffect acima para o som assim que naoLidas chegar a 0
     } catch {
       // ignore
     }
@@ -203,8 +267,7 @@ export function useNotificacoes(usuarioId?: string) {
     try {
       await notificacoesService.marcarTodasLidas();
       setNotificacoes((prev) => prev.map((n) => ({ ...n, lida: true })));
-      // Para o som imediatamente — não espera pelo próximo render
-      pararSom();
+      pararSom(); // para imediatamente sem esperar pelo próximo render
     } catch {
       // ignore
     }
