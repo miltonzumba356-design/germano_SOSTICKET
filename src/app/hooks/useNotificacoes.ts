@@ -48,6 +48,26 @@ function registarDesbloqueioAudio() {
   document.addEventListener('touchstart',  resumirCtx, { capture: true, passive: true });
 }
 
+// Keepalive: toca um buffer vazio (1 sample, volume 0) a cada 20 s.
+// Mantém o AudioContext em estado "running" e impede o Chrome de throttlar
+// os timers do tab quando está em background/minimizado.
+let _keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+function iniciarKeepaliveAudio() {
+  if (_keepaliveTimer !== null) return;
+  _keepaliveTimer = setInterval(() => {
+    const ctx = obterCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') { ctx.resume().catch(() => {}); return; }
+    try {
+      const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch { /* ignore */ }
+  }, 20_000);
+}
+
 // ── Som de notificação ────────────────────────────────────────────────────────
 // Square (punch) + sine (clareza) em camadas, compressor maximiza volume,
 // frequências 880–1318 Hz ideais para qualquer altifalante.
@@ -208,25 +228,23 @@ export function useNotificacoes(usuarioId?: string) {
         );
 
         if (novas.length > 0) {
-          // ✅ Actualiza o ref ANTES de iniciarSequenciaSom para que proximo()
-          // encontre naoLidasRef > 0 e não bloqueie o som imediatamente.
+          // Actualiza o ref ANTES de iniciarSequenciaSom — evita bug de timing
           naoLidasRef.current = listaFinal.filter((n) => !n.lida).length;
 
+          // Som: sempre, independentemente do estado do browser
           iniciarSequenciaSom();
 
           realtime.invalidate('dashboard');
           realtime.invalidate('intervencoes');
 
-          // Alerta OS quando o browser está em background
-          if (document.hidden) {
-            const primeira = novas[0];
-            enviarNotificacaoOS(
-              primeira.titulo || 'Nova notificação',
-              novas.length > 1
-                ? `Tem ${novas.length} novas notificações`
-                : (primeira.mensagem || '')
-            );
-          }
+          // Notificação Windows: SEMPRE (minimizado OU em foco — como o Slack)
+          const primeira = novas[0];
+          enviarNotificacaoOS(
+            primeira.titulo || 'Nova notificação',
+            novas.length > 1
+              ? `Tem ${novas.length} novas notificações`
+              : (primeira.mensagem || '')
+          );
         }
       }
 
@@ -243,8 +261,9 @@ export function useNotificacoes(usuarioId?: string) {
   useEffect(() => {
     if (!usuarioId) return;
 
-    // Regista listeners permanentes para manter AudioContext vivo
+    // Mantém AudioContext desbloqueado e activo em qualquer estado do browser
     registarDesbloqueioAudio();
+    iniciarKeepaliveAudio();
     pedirPermissaoNotificacaoOS();
 
     primeiraVezRef.current   = true;
