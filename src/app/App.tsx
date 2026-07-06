@@ -15,6 +15,7 @@ import { Horas } from './components/Horas';
 import { Calendario } from './components/Calendario';
 import { Register } from './components/Register';
 import { Capturas } from './components/Capturas';
+import { Conciliacao } from './components/Conciliacao';
 
 // Componente principal da aplicação que gerencia as rotas
 function AppContent() {
@@ -98,6 +99,11 @@ function AppContent() {
     // Capturas handles (apenas admin)
     if (paginaAtual === 'capturas' || paginaAtual.startsWith('capturas_')) {
       return <Capturas />;
+    }
+
+    // Conciliação handles (apenas admin)
+    if (paginaAtual === 'conciliacao' || paginaAtual.startsWith('conciliacao_')) {
+      return <Conciliacao />;
     }
 
     return <Dashboard />;

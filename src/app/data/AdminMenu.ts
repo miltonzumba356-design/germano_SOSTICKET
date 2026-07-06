@@ -9,6 +9,7 @@ import {
   User,
   Building2,
   Monitor,
+  Landmark,
   LucideIcon
 } from 'lucide-react';
 
@@ -59,6 +60,11 @@ export const adminMenu: MenuItem[] = [
     id: 'capturas',
     label: 'Capturas de Ecrã',
     icon: Monitor,
+  },
+  {
+    id: 'conciliacao',
+    label: 'Conciliação',
+    icon: Landmark,
   },
   {
     id: 'configuracoes',
