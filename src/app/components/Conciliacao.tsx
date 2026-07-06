@@ -32,6 +32,11 @@ function moeda(valor: unknown) {
   return `${Number.isFinite(numero) ? numero.toLocaleString() : '0'} Kz`;
 }
 
+function nomeMotor(motor: string) {
+  if (motor.toLowerCase().includes('tesseract')) return 'OCR Local';
+  return 'IA';
+}
+
 function mensagemErro(erro: unknown, fallback: string) {
   if (erro instanceof ConciliacaoApiError) return erro.message;
   if (erro instanceof Error) return erro.message;
@@ -81,7 +86,7 @@ function CampoFicheiro({
         type="file"
         id={id}
         className="hidden"
-        accept=".xlsx,.xls,.csv,.pdf,.ofx,image/*"
+        accept=".xlsx,.xls,.csv,.pdf,.ofx,.doc,.docx,.txt,image/*"
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) onSelecionar(file);
@@ -207,7 +212,7 @@ function ResultadoConciliacao({ relatorio }: { relatorio: RelatorioConciliacao }
         <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="w-4 h-4 text-indigo-600" />
-            <p className="text-sm font-black text-indigo-900">Análise DeepSeek</p>
+            <p className="text-sm font-black text-indigo-900">Análise IA</p>
           </div>
           <p className="text-sm text-indigo-900/80 whitespace-pre-wrap">{relatorio.analise_deepseek}</p>
         </div>
@@ -273,7 +278,7 @@ function NovaConciliacao() {
             onChange={(e) => setUsarDeepseek(e.target.checked)}
             className="rounded border-gray-300 text-theme-primary focus:ring-theme-primary"
           />
-          Ativar análise inteligente via DeepSeek AI
+          Ativar análise inteligente via IA
         </label>
 
         {erro && <AlertaErro mensagem={erro} />}
@@ -461,7 +466,7 @@ function OcrImagem() {
             onChange={(e) => setUsarDeepseek(e.target.checked)}
             className="rounded border-gray-300 text-theme-primary focus:ring-theme-primary"
           />
-          Usar DeepSeek Vision como fallback
+          Usar IA como suporte (fallback) na extração
         </label>
 
         {erro && <AlertaErro mensagem={erro} />}
@@ -479,7 +484,7 @@ function OcrImagem() {
 
       {resultado && (
         <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm space-y-4">
-          <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Motor: {resultado.motor}</p>
+          <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Motor: {nomeMotor(resultado.motor)}</p>
           <RegistosTabela registos={resultado.registos} />
         </div>
       )}
