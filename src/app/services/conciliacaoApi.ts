@@ -29,7 +29,7 @@ export interface Lancamento {
 }
 
 export interface MatchResult {
-  erp: Lancamento;
+  erp?: Lancamento | null;
   banco?: Lancamento | null;
   score_data: number;
   score_valor: number;
@@ -38,6 +38,31 @@ export interface MatchResult {
   score_total: number;
   status: StatusConciliacao;
   sugestao?: string | null;
+}
+
+export interface ItemAjusteReconciliacao {
+  data: string;
+  descricao: string;
+  valor: string;
+}
+
+export interface SeccaoReconciliacao {
+  numero: number;
+  label: string;
+  sinal: string;
+  itens: ItemAjusteReconciliacao[];
+  total: string;
+}
+
+export interface ReconciliacaoBancaria {
+  saldo_banco: string;
+  debitado_banco_nao_creditado_livros: SeccaoReconciliacao;
+  creditado_banco_nao_debitado_livros: SeccaoReconciliacao;
+  debitado_livros_nao_creditado_banco: SeccaoReconciliacao;
+  creditado_livros_nao_debitado_banco: SeccaoReconciliacao;
+  saldo_financeiro: string;
+  saldo_contabilistico: string;
+  diferenca: string;
 }
 
 export interface RelatorioConciliacao {
@@ -53,6 +78,7 @@ export interface RelatorioConciliacao {
   detalhes: MatchResult[];
   analise_deepseek?: string | null;
   sugestoes: string[];
+  reconciliacao_bancaria?: ReconciliacaoBancaria | null;
 }
 
 export interface ConciliacaoResumo {

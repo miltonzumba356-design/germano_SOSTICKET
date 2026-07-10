@@ -21,7 +21,9 @@ import {
   ConciliacaoResumo,
   MatchResult,
   OcrResponse,
+  ReconciliacaoBancaria,
   RelatorioConciliacao,
+  SeccaoReconciliacao,
   conciliacaoService,
 } from '../services/conciliacaoApi';
 
@@ -147,8 +149,14 @@ function TabelaDetalhes({ detalhes }: { detalhes: MatchResult[] }) {
           {detalhes.map((item, index) => (
             <tr key={index}>
               <td className="px-4 py-3">
-                <p className="font-bold text-gray-900">{item.erp.descricao}</p>
-                <p className="text-xs text-gray-500">{item.erp.data} · {moeda(item.erp.debito || item.erp.credito)}</p>
+                {item.erp ? (
+                  <>
+                    <p className="font-bold text-gray-900">{item.erp.descricao}</p>
+                    <p className="text-xs text-gray-500">{item.erp.data} · {moeda(item.erp.debito || item.erp.credito)}</p>
+                  </>
+                ) : (
+                  <span className="text-xs text-gray-400">Sem correspondência</span>
+                )}
               </td>
               <td className="px-4 py-3">
                 {item.banco ? (
@@ -167,6 +175,71 @@ function TabelaDetalhes({ detalhes }: { detalhes: MatchResult[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function SeccaoAjuste({ seccao }: { seccao: SeccaoReconciliacao }) {
+  return (
+    <div className="border border-gray-100 rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
+        <p className="text-xs font-black text-gray-500 uppercase tracking-wide">
+          {seccao.numero}. {seccao.label}
+        </p>
+        <p className="text-sm font-black text-gray-900">
+          {seccao.sinal} {moeda(seccao.total)}
+        </p>
+      </div>
+      {seccao.itens.length > 0 && (
+        <div className="divide-y divide-gray-50">
+          {seccao.itens.map((item, index) => (
+            <div key={index} className="flex items-center justify-between px-4 py-2 text-sm">
+              <div>
+                <p className="text-gray-700">{item.descricao}</p>
+                <p className="text-xs text-gray-400">{item.data}</p>
+              </div>
+              <p className="font-bold text-gray-700">{moeda(item.valor)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReconciliacaoBancariaCard({ reconciliacao }: { reconciliacao: ReconciliacaoBancaria }) {
+  return (
+    <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm space-y-4">
+      <p className="text-sm font-black text-gray-900">Reconciliação Bancária</p>
+
+      <div className="flex items-center justify-between text-sm">
+        <p className="text-gray-500 font-bold">Saldo pelo Banco</p>
+        <p className="font-black text-gray-900">{moeda(reconciliacao.saldo_banco)}</p>
+      </div>
+
+      <div className="space-y-3">
+        <SeccaoAjuste seccao={reconciliacao.debitado_banco_nao_creditado_livros} />
+        <SeccaoAjuste seccao={reconciliacao.creditado_banco_nao_debitado_livros} />
+        <SeccaoAjuste seccao={reconciliacao.debitado_livros_nao_creditado_banco} />
+        <SeccaoAjuste seccao={reconciliacao.creditado_livros_nao_debitado_banco} />
+      </div>
+
+      <div className="border-t border-gray-100 pt-4 grid grid-cols-3 gap-4 text-center">
+        <div>
+          <p className="text-xs text-gray-400 uppercase font-bold tracking-wide">Saldo Financeiro</p>
+          <p className="text-sm font-black text-gray-900">{moeda(reconciliacao.saldo_financeiro)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400 uppercase font-bold tracking-wide">Saldo Contabilístico</p>
+          <p className="text-sm font-black text-gray-900">{moeda(reconciliacao.saldo_contabilistico)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400 uppercase font-bold tracking-wide">Diferença</p>
+          <p className={`text-sm font-black ${Number(reconciliacao.diferenca) !== 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+            {moeda(reconciliacao.diferenca)}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -207,6 +280,10 @@ function ResultadoConciliacao({ relatorio }: { relatorio: RelatorioConciliacao }
           </div>
         </div>
       </div>
+
+      {relatorio.reconciliacao_bancaria && (
+        <ReconciliacaoBancariaCard reconciliacao={relatorio.reconciliacao_bancaria} />
+      )}
 
       {relatorio.analise_deepseek && (
         <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5">
@@ -313,11 +390,15 @@ function DetalheHistoricoModal({ id, onFechar }: { id: number; onFechar: () => v
   }, [id]);
 
   let detalhes: MatchResult[] = [];
+  let reconciliacaoBancaria: ReconciliacaoBancaria | null = null;
   if (detalhe?.detalhes) {
     try {
       const parsed = JSON.parse(detalhe.detalhes);
       if (Array.isArray(parsed)) detalhes = parsed;
-      else if (Array.isArray(parsed?.detalhes)) detalhes = parsed.detalhes;
+      else if (Array.isArray(parsed?.detalhes)) {
+        detalhes = parsed.detalhes;
+        reconciliacaoBancaria = parsed.reconciliacao_bancaria || null;
+      }
     } catch {
       detalhes = [];
     }
@@ -354,6 +435,7 @@ function DetalheHistoricoModal({ id, onFechar }: { id: number; onFechar: () => v
                 detalhes,
                 analise_deepseek: detalhe.analise_deepseek,
                 sugestoes: detalhe.sugestoes || [],
+                reconciliacao_bancaria: reconciliacaoBancaria,
               }}
             />
           ) : null}
