@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  ArrowLeft,
   Banknote,
   Camera,
   CheckCircle2,
@@ -376,18 +377,20 @@ function NovaConciliacao() {
   );
 }
 
-function DetalheHistoricoModal({ id, onFechar }: { id: number; onFechar: () => void }) {
+function DetalheHistoricoPagina({ resumo, onVoltar }: { resumo: ConciliacaoResumo; onVoltar: () => void }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [detalhe, setDetalhe] = useState<ConciliacaoDetalhe | null>(null);
 
   useEffect(() => {
+    setCarregando(true);
+    setErro('');
     conciliacaoService
-      .obterPorId(id)
+      .obterPorId(resumo.id)
       .then(setDetalhe)
       .catch((e) => setErro(mensagemErro(e, 'Não foi possível carregar os detalhes.')))
       .finally(() => setCarregando(false));
-  }, [id]);
+  }, [resumo.id]);
 
   let detalhes: MatchResult[] = [];
   let reconciliacaoBancaria: ReconciliacaoBancaria | null = null;
@@ -405,42 +408,48 @@ function DetalheHistoricoModal({ id, onFechar }: { id: number; onFechar: () => v
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200">
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-          <h3 className="text-xl font-bold text-gray-900">Conciliação #{id}</h3>
-          <button onClick={onFechar} className="p-2 hover:bg-gray-100 rounded-full">
-            <X className="w-5 h-5 text-gray-400" />
-          </button>
-        </div>
-        <div className="p-6">
-          {carregando ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-theme-primary" />
-            </div>
-          ) : erro ? (
-            <AlertaErro mensagem={erro} />
-          ) : detalhe ? (
-            <ResultadoConciliacao
-              relatorio={{
-                id: detalhe.id,
-                saldo_banco: detalhe.saldo_banco,
-                saldo_erp: detalhe.saldo_erp,
-                conciliados: detalhe.conciliados,
-                pendentes: detalhe.pendentes,
-                divergencias: detalhe.divergencias,
-                total_lancamentos: detalhe.total_lancamentos,
-                diferenca: detalhe.diferenca,
-                percentual_conciliacao: detalhe.percentual,
-                detalhes,
-                analise_deepseek: detalhe.analise_deepseek,
-                sugestoes: detalhe.sugestoes || [],
-                reconciliacao_bancaria: reconciliacaoBancaria,
-              }}
-            />
-          ) : null}
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onVoltar}
+          className="p-2 hover:bg-gray-100 rounded-full flex-shrink-0"
+        >
+          <ArrowLeft className="w-5 h-5 text-gray-500" />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Conciliação #{resumo.id}</h2>
+          <p className="text-sm text-gray-500">
+            {new Date(resumo.data).toLocaleString('pt-PT')} · {resumo.erp || '-'} · {resumo.extrato || '-'}
+          </p>
         </div>
       </div>
+
+      {carregando ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-theme-primary" />
+        </div>
+      ) : erro ? (
+        <AlertaErro mensagem={erro} />
+      ) : detalhe ? (
+        <ResultadoConciliacao
+          relatorio={{
+            id: detalhe.id,
+            saldo_banco: detalhe.saldo_banco,
+            saldo_erp: detalhe.saldo_erp,
+            conciliados: detalhe.conciliados,
+            pendentes: detalhe.pendentes,
+            divergencias: detalhe.divergencias,
+            total_lancamentos: detalhe.total_lancamentos,
+            diferenca: detalhe.diferenca,
+            percentual_conciliacao: detalhe.percentual,
+            detalhes,
+            analise_deepseek: detalhe.analise_deepseek,
+            sugestoes: detalhe.sugestoes || [],
+            reconciliacao_bancaria: reconciliacaoBancaria,
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -449,7 +458,7 @@ function Historico() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [conciliacoes, setConciliacoes] = useState<ConciliacaoResumo[]>([]);
-  const [idSelecionado, setIdSelecionado] = useState<number | null>(null);
+  const [selecionado, setSelecionado] = useState<ConciliacaoResumo | null>(null);
 
   useEffect(() => {
     conciliacaoService
@@ -458,6 +467,10 @@ function Historico() {
       .catch((e) => setErro(mensagemErro(e, 'Não foi possível carregar o histórico.')))
       .finally(() => setCarregando(false));
   }, []);
+
+  if (selecionado) {
+    return <DetalheHistoricoPagina resumo={selecionado} onVoltar={() => setSelecionado(null)} />;
+  }
 
   return (
     <div className="space-y-4">
@@ -485,7 +498,7 @@ function Historico() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {conciliacoes.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setIdSelecionado(item.id)}>
+                <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelecionado(item)}>
                   <td className="px-4 py-3 text-gray-700">{new Date(item.data).toLocaleString('pt-PT')}</td>
                   <td className="px-4 py-3 text-gray-700">{item.erp || '-'}</td>
                   <td className="px-4 py-3 text-gray-700">{item.extrato || '-'}</td>
@@ -500,10 +513,6 @@ function Historico() {
             </tbody>
           </table>
         </div>
-      )}
-
-      {idSelecionado !== null && (
-        <DetalheHistoricoModal id={idSelecionado} onFechar={() => setIdSelecionado(null)} />
       )}
     </div>
   );
