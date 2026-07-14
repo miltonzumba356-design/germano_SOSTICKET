@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertCircle, FileText, Film, MessageCircle,
   Pencil, Trash2, Clock, ArrowLeft, SlidersHorizontal, Check,
   Bot, ClipboardList, UploadCloud, Image as ImageIcon,
+  Download, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import type { Empresa, Intervencao } from '../../types/api';
 import { ConversaListItem } from './ConversaListItem';
@@ -126,6 +127,7 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
   const [historicoAberto, setHistoricoAberto] = useState(false);
   const [filtroPrioridadeAberto, setFiltroPrioridadeAberto] = useState(false);
   const [enviandoAnexo, setEnviandoAnexo] = useState(false);
+  const [visualizador, setVisualizador] = useState<{ lista: { url: string; nome?: string }[]; indice: number } | null>(null);
   const fimDaThreadRef = useRef<HTMLDivElement>(null);
   const inputAnexoRef = useRef<HTMLInputElement>(null);
   const ultimoErroMostrado = useRef<string>('');
@@ -342,9 +344,19 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
 
               {intervencaoDetalhe.anexos && intervencaoDetalhe.anexos.length > 0 && (
                 <div className="flex justify-end">
-                  <div className="max-w-[80%] flex flex-wrap gap-2 justify-end">
+                  <div className="max-w-[80%] flex flex-col items-end gap-2">
                     {intervencaoDetalhe.anexos.map((anexo: any, i: number) => (
-                      <AnexoChip key={i} url={anexo.url} nome={anexo.nome_arquivo} />
+                      <AnexoBolha
+                        key={i}
+                        url={anexo.url}
+                        nome={anexo.nome_arquivo}
+                        onAbrir={() =>
+                          setVisualizador({
+                            lista: intervencaoDetalhe.anexos!.map((a: any) => ({ url: a.url, nome: a.nome_arquivo })),
+                            indice: i,
+                          })
+                        }
+                      />
                     ))}
                   </div>
                 </div>
@@ -427,6 +439,15 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
             </button>
           )}
         </form>
+
+        {visualizador && (
+          <VisualizadorAnexo
+            lista={visualizador.lista}
+            indice={visualizador.indice}
+            onFechar={() => setVisualizador(null)}
+            onNavegar={(indice) => setVisualizador((v) => (v ? { ...v, indice } : v))}
+          />
+        )}
       </div>
     );
   }
@@ -605,23 +626,145 @@ function MensagemBolha({
   );
 }
 
-function AnexoChip({ url, nome }: { url: string; nome?: string }) {
+function AnexoBolha({ url, nome, onAbrir }: { url: string; nome?: string; onAbrir: () => void }) {
   const tipo = detectarTipoAnexo(url);
+
+  if (tipo === 'imagem') {
+    return (
+      <button
+        type="button"
+        onClick={onAbrir}
+        className="block rounded-[18px] overflow-hidden shadow-sm max-w-[240px] active:scale-[0.98] transition-transform"
+      >
+        <img src={url} alt={nome || 'Anexo'} className="w-full h-auto max-h-72 object-cover" />
+      </button>
+    );
+  }
+
   const Icon = tipo === 'pdf' ? FileText : tipo === 'video' ? Film : Paperclip;
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-2 px-3 py-2 bg-[#7c3aed] text-white rounded-[14px] text-xs font-semibold hover:opacity-90 transition-opacity max-w-[220px] shadow-sm"
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="flex items-center gap-2 px-3 py-2.5 bg-[#7c3aed] text-white rounded-[14px] text-xs font-semibold hover:opacity-90 transition-all active:scale-[0.98] max-w-[240px] shadow-sm"
     >
-      {tipo === 'imagem' ? (
-        <img src={url} alt={nome} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
-      ) : (
-        <Icon className="w-4 h-4 flex-shrink-0" />
-      )}
+      <Icon className="w-5 h-5 flex-shrink-0" />
       <span className="truncate">{nome || 'Anexo'}</span>
-    </a>
+    </button>
+  );
+}
+
+function VisualizadorAnexo({
+  lista, indice, onFechar, onNavegar,
+}: {
+  lista: { url: string; nome?: string }[];
+  indice: number;
+  onFechar: () => void;
+  onNavegar: (indice: number) => void;
+}) {
+  const atual = lista[indice];
+  const tipo = detectarTipoAnexo(atual.url);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onFechar();
+      if (e.key === 'ArrowLeft' && indice > 0) onNavegar(indice - 1);
+      if (e.key === 'ArrowRight' && indice < lista.length - 1) onNavegar(indice + 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [indice, lista.length, onFechar, onNavegar]);
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col select-none" onContextMenu={(e) => e.preventDefault()}>
+      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0 pt-[calc(12px_+_env(safe-area-inset-top,0px))]">
+        <p className="text-sm text-white truncate flex-1">{atual.nome || 'Anexo'}</p>
+        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+          {lista.length > 1 && <span className="text-xs text-white/60 mr-1">{indice + 1} / {lista.length}</span>}
+          <a
+            href={atual.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+            title="Abrir noutro separador"
+          >
+            <Download className="w-5 h-5" />
+          </a>
+          <button onClick={onFechar} className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors" aria-label="Fechar">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+        {indice > 0 && (
+          <button
+            onClick={() => onNavegar(indice - 1)}
+            className="absolute left-2 z-10 p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+          >
+            <ChevronLeft className="w-7 h-7" />
+          </button>
+        )}
+        {indice < lista.length - 1 && (
+          <button
+            onClick={() => onNavegar(indice + 1)}
+            className="absolute right-2 z-10 p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+          >
+            <ChevronRight className="w-7 h-7" />
+          </button>
+        )}
+
+        {tipo === 'imagem' && (
+          <img
+            src={atual.url}
+            alt={atual.nome || 'Anexo'}
+            className="max-h-full max-w-full object-contain px-12"
+            draggable={false}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+        )}
+        {tipo === 'pdf' && (
+          <iframe
+            key={atual.url}
+            src={`${atual.url}#toolbar=0&navpanes=0`}
+            className="w-full h-full border-0"
+            title={atual.nome || 'PDF'}
+          />
+        )}
+        {tipo === 'video' && (
+          <video key={atual.url} src={atual.url} controls className="max-h-full max-w-full px-12" />
+        )}
+        {tipo === 'outro' && (
+          <div className="text-center px-8">
+            <Paperclip className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+            <p className="text-white font-medium">{atual.nome}</p>
+            <p className="text-gray-400 text-sm mt-2">Pré-visualização não disponível para este tipo de ficheiro.</p>
+          </div>
+        )}
+      </div>
+
+      {lista.length > 1 && (
+        <div className="flex-shrink-0 bg-black/60 px-4 py-2 flex gap-2 overflow-x-auto pb-[calc(8px_+_env(safe-area-inset-bottom))]">
+          {lista.map((item, idx) => (
+            <button
+              key={idx}
+              onClick={() => onNavegar(idx)}
+              className={`flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border-2 transition-colors ${
+                idx === indice ? 'border-[#7c3aed]' : 'border-transparent hover:border-white/30'
+              }`}
+            >
+              {detectarTipoAnexo(item.url) === 'imagem' ? (
+                <img src={item.url} alt={item.nome} className="w-full h-full object-cover" draggable={false} />
+              ) : (
+                <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                  <Paperclip className="w-4 h-4 text-gray-400" />
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
