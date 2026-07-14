@@ -34,7 +34,7 @@ export function ConversaListItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 p-4 text-left bg-white rounded-[18px] shadow-sm transition-all ${
+      className={`w-full flex items-center gap-3 p-4 text-left bg-white rounded-[18px] shadow-sm transition-all active:scale-[0.98] active:bg-[#faf8ff] ${
         ativo ? 'border-l-4 border-l-[#7c3aed] pl-3' : 'border-l-4 border-l-transparent'
       }`}
     >

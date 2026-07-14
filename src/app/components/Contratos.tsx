@@ -428,6 +428,7 @@ export function Contratos() {
         setExibirModalDetalhes={setExibirModalDetalhes}
         handleVerDetalhes={handleVerDetalhes}
         handleBaixarPdf={handleBaixarPdf}
+        onAtualizar={() => carregarContratos()}
       />
     );
   }

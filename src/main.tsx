@@ -11,16 +11,6 @@
   };
 
   createRoot(document.getElementById("root")!).render(<App />);
-  
-  // Registro do Service Worker para suporte PWA (Android & iOS)
-  if ('serviceWorker' in navigator && import.meta.env.PROD) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
-        .then((reg) => {
-          console.log('Service Worker registrado com sucesso:', reg.scope);
-        })
-        .catch((err) => {
-          console.error('Falha ao registrar o Service Worker:', err);
-        });
-    });
-  }
+
+  // Nota: o registo do Service Worker é injetado automaticamente pelo vite-plugin-pwa
+  // (registerSW.js) durante o build — um registo manual aqui duplicaria a subscrição.

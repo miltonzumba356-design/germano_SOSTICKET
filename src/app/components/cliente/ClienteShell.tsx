@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
-import { Menu, Search, X, LayoutGrid, MessageSquare, FileText, User, LogOut } from 'lucide-react';
+import { Menu, Search, X, LayoutGrid, MessageSquare, FileText, User, LogOut, RefreshCw } from 'lucide-react';
 import type { Usuario } from '../../types/api';
 import { nomeEmpresa } from './helpers';
+import { Toaster } from '../ui/sonner';
+import { usePullToRefresh } from './usePullToRefresh';
 import './cliente-fonts.css';
 
 const ABAS = [
@@ -11,10 +13,17 @@ const ABAS = [
   { id: 'perfil', label: 'Perfil', icon: User },
 ] as const;
 
+type AoAtualizar = (() => Promise<void> | void) | null;
+
 // Permite que uma tela filha (ex.: conversa em tela cheia) esconda temporariamente
-// o cabeçalho/barra de abas do shell, replicando a navegação nativa dos mockups.
-const ClienteChromeContext = createContext<{ ocultarChrome: (v: boolean) => void }>({
+// o cabeçalho/barra de abas do shell, replicando a navegação nativa dos mockups, e
+// registe a sua própria função de "puxar para atualizar" no contentor do shell.
+const ClienteChromeContext = createContext<{
+  ocultarChrome: (v: boolean) => void;
+  registarAoAtualizar: (fn: AoAtualizar) => void;
+}>({
   ocultarChrome: () => {},
+  registarAoAtualizar: () => {},
 });
 
 export function useClienteChrome() {
@@ -32,6 +41,7 @@ export function ClienteShell({
 }) {
   const [drawerAberto, setDrawerAberto] = useState(false);
   const [chromeOculto, setChromeOculto] = useState(false);
+  const [aoAtualizar, setAoAtualizar] = useState<AoAtualizar>(null);
 
   const irPara = (pagina: string) => {
     onNavigate(pagina);
@@ -39,16 +49,22 @@ export function ClienteShell({
   };
 
   const ocultarChrome = useCallback((v: boolean) => setChromeOculto(v), []);
+  const registarAoAtualizar = useCallback((fn: AoAtualizar) => setAoAtualizar(() => fn), []);
+
+  const { containerRef, pullDistance, refreshing, limiar, handlers } = usePullToRefresh<HTMLElement>(
+    chromeOculto ? null : aoAtualizar
+  );
 
   const inicialNome = (usuario?.nome || 'C').substring(0, 1).toUpperCase();
   const empresaNome = nomeEmpresa(usuario?.empresa) || usuario?.email || '';
 
   return (
-    <div className="cliente-pwa cliente-font-body h-screen overflow-hidden flex bg-[#f7f9fb]">
+    <div className="cliente-pwa cliente-font-body h-screen h-[100dvh] overflow-hidden flex bg-[#f7f9fb]">
+      <Toaster position="top-center" richColors closeButton />
 
       {/* ── Sidebar — apenas desktop (≥ lg) ─────────────────────────── */}
       {!chromeOculto && (
-        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white border-r border-[#e5e7eb] min-h-screen sticky top-0 h-screen overflow-y-auto">
+        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white border-r border-[#e5e7eb] sticky top-0 h-screen h-[100dvh] overflow-y-auto">
           {/* Logo / Brand */}
           <div className="px-6 py-5 border-b border-[#e5e7eb]">
             <h1 className="cliente-font-heading text-xl font-bold text-[#630ed4]">SOS Ticket</h1>
@@ -130,15 +146,34 @@ export function ClienteShell({
         )}
 
         {/* Conteúdo principal */}
-        <main className={`flex-1 overflow-y-auto ${!chromeOculto ? 'pb-24 lg:pb-6' : ''}`}>
-          <ClienteChromeContext.Provider value={{ ocultarChrome }}>
-            {children}
-          </ClienteChromeContext.Provider>
+        <main
+          ref={containerRef}
+          className={`relative flex-1 overflow-y-auto overscroll-y-contain ${!chromeOculto ? 'pb-24 lg:pb-6' : ''}`}
+          onTouchStart={handlers.onTouchStart}
+          onTouchMove={handlers.onTouchMove}
+          onTouchEnd={handlers.onTouchEnd}
+        >
+          {pullDistance > 0 && (
+            <div
+              className="absolute top-0 inset-x-0 flex justify-center pointer-events-none z-10"
+              style={{ height: pullDistance, transition: refreshing ? 'height 0.2s ease' : undefined }}
+            >
+              <RefreshCw
+                className={`w-5 h-5 mt-3 text-[#7c3aed] ${refreshing ? 'animate-spin' : ''}`}
+                style={!refreshing ? { transform: `rotate(${(pullDistance / limiar) * 180}deg)` } : undefined}
+              />
+            </div>
+          )}
+          <div style={pullDistance > 0 ? { transform: `translateY(${pullDistance}px)`, transition: refreshing ? 'transform 0.2s ease' : undefined } : undefined}>
+            <ClienteChromeContext.Provider value={{ ocultarChrome, registarAoAtualizar }}>
+              {children}
+            </ClienteChromeContext.Provider>
+          </div>
         </main>
 
         {/* Bottom nav — apenas mobile (<lg) */}
         {!chromeOculto && (
-          <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur-md border-t border-[#e5e7eb] px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+          <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur-md border-t border-[#e5e7eb] px-2 pt-2 pb-[calc(0.5rem_+_env(safe-area-inset-bottom))]">
             <div className="flex items-center justify-around">
               {ABAS.map((aba) => {
                 const Icon = aba.icon;

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import {
   Search, Plus, Send, Paperclip, Smile, X, MoreVertical, Loader2,
   CheckCircle2, AlertCircle, FileText, Film, MessageCircle,
@@ -7,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { Empresa, Intervencao } from '../../types/api';
 import { ConversaListItem } from './ConversaListItem';
+import { ConversaSkeleton } from './Skeletons';
 import { useClienteChrome } from './ClienteShell';
 import {
   statusStyle, priorityStyle, detectarTipoAnexo,
@@ -75,6 +77,7 @@ export interface ClienteIntervencoesViewProps {
   salvandoEdicao: boolean;
   handleDeletarIntervencao: (intervencao: Intervencao) => void | Promise<void>;
   handleUploadAnexo: (intervencaoId: string, file: File) => void | Promise<void>;
+  onAtualizar?: () => void | Promise<void>;
 }
 
 const FILTROS_STATUS = [
@@ -108,10 +111,16 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
     handleVerDetalhes, novoComentario, setNovoComentario, handleEnviarComentario,
     podeClienteAlterar, exibirModalEditar, setExibirModalEditar, formEditar, setFormEditar,
     abrirEditarCliente, handleEditarCliente, salvandoEdicao, handleDeletarIntervencao,
-    handleUploadAnexo,
+    handleUploadAnexo, onAtualizar,
   } = props;
 
-  const { ocultarChrome } = useClienteChrome();
+  const { ocultarChrome, registarAoAtualizar } = useClienteChrome();
+
+  // Regista o refetch da lista para o gesto de "puxar para atualizar" do shell.
+  useEffect(() => {
+    registarAoAtualizar(onAtualizar || null);
+    return () => registarAoAtualizar(null);
+  }, [onAtualizar, registarAoAtualizar]);
   const [menuAberto, setMenuAberto] = useState(false);
   const [emojiAberto, setEmojiAberto] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState(false);
@@ -119,8 +128,23 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
   const [enviandoAnexo, setEnviandoAnexo] = useState(false);
   const fimDaThreadRef = useRef<HTMLDivElement>(null);
   const inputAnexoRef = useRef<HTMLInputElement>(null);
+  const ultimoErroMostrado = useRef<string>('');
 
   const modoChat = exibirModalNovo || (exibirModalDetalhes && !!intervencaoDetalhe);
+
+  // Feedback em toast para erros e para a criação de um novo atendimento
+  useEffect(() => {
+    if (erro && erro !== ultimoErroMostrado.current) {
+      toast.error(erro);
+    }
+    ultimoErroMostrado.current = erro;
+  }, [erro]);
+
+  useEffect(() => {
+    if (status === 'success') {
+      toast.success('Atendimento enviado com sucesso!');
+    }
+  }, [status]);
 
   // Esconde o cabeçalho/barra de abas do shell enquanto a conversa está em tela cheia.
   useEffect(() => {
@@ -210,9 +234,9 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
 
   if (exibirModalDetalhes && intervencaoDetalhe) {
     return (
-      <div className="fixed inset-0 z-30 flex flex-col bg-white cliente-font-body">
+      <div className="fixed inset-0 z-30 flex flex-col bg-white cliente-font-body animate-in slide-in-from-right duration-200">
         {/* Cabeçalho da conversa */}
-        <div className="flex-shrink-0 bg-white border-b border-[#e5e7eb] pt-[calc(8px+env(safe-area-inset-top,0px))]">
+        <div className="flex-shrink-0 bg-white border-b border-[#e5e7eb] pt-[calc(8px_+_env(safe-area-inset-top,0px))]">
           <div className="flex items-center gap-2 px-3 py-2">
             <button onClick={fecharChat} className="p-2 text-[#191c1e] hover:bg-gray-100 rounded-full flex-shrink-0">
               <ArrowLeft className="w-5 h-5" />
@@ -469,7 +493,7 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
           <button
             key={f.valor}
             onClick={() => setFiltroStatus(f.valor)}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all ${
+            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all active:scale-95 ${
               filtroStatus === f.valor
                 ? 'bg-[#7c3aed] text-white shadow-md shadow-[#7c3aed]/25'
                 : 'bg-[#eceef0] text-[#4a4455] hover:bg-[#e2d4f0]'
@@ -489,12 +513,22 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
       {/* Lista de atendimentos */}
       <div className="space-y-3 pb-28 md:pb-8">
         {carregando ? (
-          Array(3).fill(0).map((_, i) => <div key={i} className="h-24 bg-white/60 rounded-[18px] animate-pulse" />)
+          <>
+            <ConversaSkeleton />
+            <ConversaSkeleton />
+            <ConversaSkeleton />
+          </>
         ) : listaFiltrada.length === 0 ? (
           <div className="py-16 text-center">
             <MessageCircle className="w-10 h-10 text-gray-200 mx-auto mb-3" />
             <p className="text-sm font-semibold text-gray-400">Nenhum atendimento encontrado.</p>
             <p className="text-xs text-gray-300 mt-1">Abra o seu primeiro pedido de suporte.</p>
+            <button
+              onClick={abrirComposer}
+              className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-[#7c3aed] text-white text-sm font-bold rounded-full shadow-md shadow-[#7c3aed]/25 hover:bg-[#630ed4] active:scale-95 transition-all"
+            >
+              <Plus className="w-4 h-4" /> Novo Atendimento
+            </button>
           </div>
         ) : (
           listaFiltrada.map((intervencao) => (
@@ -679,8 +713,8 @@ function NovoAtendimento({
   onSubmit: (e: React.FormEvent) => void | Promise<void>;
 }) {
   return (
-    <div className="fixed inset-0 z-30 flex flex-col bg-[#f7f9fb] cliente-font-body">
-      <div className="flex-shrink-0 flex items-center justify-between px-3 py-3 bg-white border-b border-[#e5e7eb] pt-[calc(12px+env(safe-area-inset-top,0px))]">
+    <div className="fixed inset-0 z-30 flex flex-col bg-[#f7f9fb] cliente-font-body animate-in slide-in-from-bottom duration-200">
+      <div className="flex-shrink-0 flex items-center justify-between px-3 py-3 bg-white border-b border-[#e5e7eb] pt-[calc(12px_+_env(safe-area-inset-top,0px))]">
         <button onClick={onVoltar} className="p-2 text-[#191c1e] hover:bg-gray-100 rounded-full">
           <X className="w-5 h-5" />
         </button>

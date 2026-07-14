@@ -696,6 +696,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         salvandoEdicao={salvandoEdicao}
         handleDeletarIntervencao={handleDeletarIntervencao}
         handleUploadAnexo={handleUploadAnexo}
+        onAtualizar={() => carregarIntervencoes(true)}
       />
     );
   }

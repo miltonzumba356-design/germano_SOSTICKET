@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
   FileText, Clock, AlertTriangle, CheckCircle2, AlertCircle, MessageCircle,
   ArrowRight, Bell, Plus,
@@ -6,6 +6,8 @@ import {
 import type { Intervencao, Contrato } from '../../types/api';
 import { formatarHoras } from '../../utils/formatters';
 import { ConversaListItem } from './ConversaListItem';
+import { WidgetSkeleton } from './Skeletons';
+import { useClienteChrome } from './ClienteShell';
 import { definirIntervencaoSelecionada, sinalizarNovoAtendimento, statusStyle } from './helpers';
 
 interface AtividadeRecente {
@@ -68,14 +70,21 @@ export interface ClienteDashboardViewProps {
   contratosExpira: Contrato[];
   carregando: boolean;
   onNavigate?: (pagina: string) => void;
+  onAtualizar?: () => void | Promise<void>;
 }
 
 export function ClienteDashboardView({
-  usuario, dadosDashboard, intervencoes, contratosExpira, carregando, onNavigate,
+  usuario, dadosDashboard, intervencoes, contratosExpira, carregando, onNavigate, onAtualizar,
 }: ClienteDashboardViewProps) {
   const primeiroNome = (usuario?.nome || 'Cliente').split(' ')[0];
   const atividades = useMemo(() => construirAtividades(intervencoes), [intervencoes]);
   const conversasRecentes = useMemo(() => intervencoes.slice(0, 4), [intervencoes]);
+  const { registarAoAtualizar } = useClienteChrome();
+
+  useEffect(() => {
+    registarAoAtualizar(onAtualizar || null);
+    return () => registarAoAtualizar(null);
+  }, [onAtualizar, registarAoAtualizar]);
 
   const ticketsAbertos = Number(dadosDashboard?.intervencoes_abertas ?? 0);
   const horasDisponiveis = Number(dadosDashboard?.total_horas_disponiveis || 0);
@@ -101,39 +110,43 @@ export function ClienteDashboardView({
 
       {/* Widgets 2x2 em mobile, 4 colunas em desktop */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Widget
-          icon={FileText}
-          cor="text-[#7c3aed]"
-          fundo="bg-[#ede0ff]"
-          titulo="Contratos Ativos"
-          valor={dadosDashboard?.contratos_ativos ?? 0}
-          carregando={carregando}
-        />
-        <Widget
-          icon={Clock}
-          cor="text-[#630ed4]"
-          fundo="bg-[#ede0ff]"
-          titulo="Horas Disponíveis"
-          valor={formatarHoras(dadosDashboard?.total_horas_disponiveis)}
-          carregando={carregando}
-        />
-        <Widget
-          icon={AlertTriangle}
-          cor="text-red-600"
-          fundo="bg-red-50"
-          titulo="Atendimentos Abertos"
-          valor={ticketsAbertos}
-          carregando={carregando}
-          destaque={ticketsAbertos > 0}
-        />
-        <Widget
-          icon={CheckCircle2}
-          cor="text-[#4a4455]"
-          fundo="bg-[#eceef0]"
-          titulo="Atendimentos Concluídos"
-          valor={dadosDashboard?.intervencoes_concluidas ?? 0}
-          carregando={carregando}
-        />
+        {carregando ? (
+          <>
+            <WidgetSkeleton /><WidgetSkeleton /><WidgetSkeleton /><WidgetSkeleton />
+          </>
+        ) : (
+          <>
+            <Widget
+              icon={FileText}
+              cor="text-[#7c3aed]"
+              fundo="bg-[#ede0ff]"
+              titulo="Contratos Ativos"
+              valor={dadosDashboard?.contratos_ativos ?? 0}
+            />
+            <Widget
+              icon={Clock}
+              cor="text-[#630ed4]"
+              fundo="bg-[#ede0ff]"
+              titulo="Horas Disponíveis"
+              valor={formatarHoras(dadosDashboard?.total_horas_disponiveis)}
+            />
+            <Widget
+              icon={AlertTriangle}
+              cor="text-red-600"
+              fundo="bg-red-50"
+              titulo="Atendimentos Abertos"
+              valor={ticketsAbertos}
+              destaque={ticketsAbertos > 0}
+            />
+            <Widget
+              icon={CheckCircle2}
+              cor="text-[#4a4455]"
+              fundo="bg-[#eceef0]"
+              titulo="Atendimentos Concluídos"
+              valor={dadosDashboard?.intervencoes_concluidas ?? 0}
+            />
+          </>
+        )}
       </div>
 
       {/* Atendimentos recentes */}
@@ -144,10 +157,21 @@ export function ClienteDashboardView({
             Ver todos <ArrowRight className="w-3 h-3" />
           </button>
         </div>
-        {conversasRecentes.length === 0 ? (
+        {carregando ? (
+          <div className="space-y-3">
+            <ConversaSkeleton />
+            <ConversaSkeleton />
+          </div>
+        ) : conversasRecentes.length === 0 ? (
           <div className="bg-white rounded-[18px] shadow-sm p-8 text-center">
             <MessageCircle className="w-8 h-8 text-gray-200 mx-auto mb-2" />
             <p className="text-sm text-gray-400">Nenhum atendimento ainda. Abra a sua primeira solicitação.</p>
+            <button
+              onClick={abrirNovoAtendimento}
+              className="mt-3 inline-flex items-center gap-2 px-5 py-2.5 bg-[#7c3aed] text-white text-sm font-bold rounded-full shadow-md shadow-[#7c3aed]/25 hover:bg-[#630ed4] active:scale-95 transition-all"
+            >
+              <Plus className="w-4 h-4" /> Novo Atendimento
+            </button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -237,8 +261,8 @@ export function ClienteDashboardView({
 }
 
 function Widget({
-  icon: Icon, cor, fundo, titulo, valor, carregando, destaque,
-}: { icon: any; cor: string; fundo: string; titulo: string; valor: string | number; carregando?: boolean; destaque?: boolean }) {
+  icon: Icon, cor, fundo, titulo, valor, destaque,
+}: { icon: any; cor: string; fundo: string; titulo: string; valor: string | number; destaque?: boolean }) {
   return (
     <div className="relative bg-white rounded-[18px] shadow-sm p-4">
       <div className="flex items-start justify-between mb-3">
@@ -247,7 +271,7 @@ function Widget({
         </div>
         {destaque && <span className="w-2.5 h-2.5 rounded-full bg-red-600" />}
       </div>
-      <p className="cliente-font-heading text-xl font-bold text-[#191c1e]">{carregando ? '…' : valor}</p>
+      <p className="cliente-font-heading text-xl font-bold text-[#191c1e]">{valor}</p>
       <p className="text-xs text-[#4a4455] mt-0.5">{titulo}</p>
     </div>
   );

@@ -381,6 +381,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
         contratosExpira={contratosExpira}
         carregando={carregando}
         onNavigate={onNavigate}
+        onAtualizar={() => carregarDados(true)}
       />
     );
   }
