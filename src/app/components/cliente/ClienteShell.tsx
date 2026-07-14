@@ -44,7 +44,7 @@ export function ClienteShell({
   const empresaNome = nomeEmpresa(usuario?.empresa) || usuario?.email || '';
 
   return (
-    <div className="cliente-pwa cliente-font-body min-h-screen flex bg-[#f7f9fb]">
+    <div className="cliente-pwa cliente-font-body h-screen overflow-hidden flex bg-[#f7f9fb]">
 
       {/* ── Sidebar — apenas desktop (≥ lg) ─────────────────────────── */}
       {!chromeOculto && (
@@ -108,7 +108,7 @@ export function ClienteShell({
 
         {/* Header — mobile (<lg) */}
         {!chromeOculto && (
-          <header className="lg:hidden sticky top-0 z-40 bg-[#f7f9fb]/90 backdrop-blur-md border-b border-[#e5e7eb]">
+          <header className="lg:hidden sticky top-0 z-40 bg-[#f7f9fb]/90 backdrop-blur-md border-b border-[#e5e7eb] pt-[env(safe-area-inset-top,0px)]">
             <div className="h-14 px-4 flex items-center justify-between">
               <button
                 onClick={() => setDrawerAberto(true)}

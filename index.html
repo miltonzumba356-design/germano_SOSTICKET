@@ -116,21 +116,54 @@
       align-items: center;
       justify-content: center;
       flex-direction: column;
-      gap: 16px;
       z-index: 9999;
       transition: opacity 0.4s ease;
     }
     #splash.hidden { opacity: 0; pointer-events: none; }
+    #splash-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      animation: splashSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
     #splash img { width: 96px; height: 96px; border-radius: 22px; }
     #splash p { color: white; font-size: 20px; font-weight: 700; font-family: system-ui, sans-serif; letter-spacing: -0.5px; }
+    #splash-footer {
+      position: absolute;
+      bottom: 32px;
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 10px;
+      font-weight: 600;
+      font-family: system-ui, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      text-align: center;
+      padding: 0 20px;
+    }
+    @keyframes splashSlideUp {
+      0% {
+        transform: translateY(100vh);
+        opacity: 0;
+      }
+      100% {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
   </style>
 </head>
 
 <body translate="no" class="notranslate">
   <!-- Splash screen nativo (substitui tela branca iOS) -->
   <div id="splash">
-    <img src="/icons/icon-192x192.png" alt="SOS Contábeis" />
-    <p>SOS Contábeis</p>
+    <div id="splash-content">
+      <img src="/icons/icon-192x192.png" alt="SOS Contábeis" />
+      <p>SOS Contábeis</p>
+    </div>
+    <div id="splash-footer">
+      todos os direitos reservados a electro m
+    </div>
   </div>
 
   <div id="root" translate="no" class="notranslate"></div>

@@ -212,8 +212,8 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
     return (
       <div className="fixed inset-0 z-30 flex flex-col bg-white cliente-font-body">
         {/* Cabeçalho da conversa */}
-        <div className="flex-shrink-0 bg-white border-b border-[#e5e7eb]">
-          <div className="flex items-center gap-2 px-3 py-3">
+        <div className="flex-shrink-0 bg-white border-b border-[#e5e7eb] pt-[calc(8px+env(safe-area-inset-top,0px))]">
+          <div className="flex items-center gap-2 px-3 py-2">
             <button onClick={fecharChat} className="p-2 text-[#191c1e] hover:bg-gray-100 rounded-full flex-shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -680,7 +680,7 @@ function NovoAtendimento({
 }) {
   return (
     <div className="fixed inset-0 z-30 flex flex-col bg-[#f7f9fb] cliente-font-body">
-      <div className="flex-shrink-0 flex items-center justify-between px-3 py-3 bg-white border-b border-[#e5e7eb]">
+      <div className="flex-shrink-0 flex items-center justify-between px-3 py-3 bg-white border-b border-[#e5e7eb] pt-[calc(12px+env(safe-area-inset-top,0px))]">
         <button onClick={onVoltar} className="p-2 text-[#191c1e] hover:bg-gray-100 rounded-full">
           <X className="w-5 h-5" />
         </button>
