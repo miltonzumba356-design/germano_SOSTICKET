@@ -347,7 +347,7 @@ export function Tecnicos() {
                     value={formData.empresa}
                     onChange={handleInputChange}
                     className="hidden" 
-                    placeholder="Safira" 
+                    placeholder="Electro Soft" 
                   />
                 </div>
                 <div className="space-y-1">

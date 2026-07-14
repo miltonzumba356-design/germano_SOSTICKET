@@ -27,21 +27,21 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f0f2f5] font-sans selection:bg-blue-500/30">
+    <div className="min-h-screen flex items-center justify-center bg-[#f0f2f5] font-sans selection:bg-purple-500/30">
       <div className="w-full max-w-[1050px] h-[680px] bg-white rounded-[48px] overflow-hidden flex shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] border border-white/60 mx-4 relative">
         
         {/* Lado Esquerdo: Formulário */}
         <div className="w-full lg:w-[60%] p-14 flex flex-col justify-between relative z-30">
           {/* Logo Estilizada */}
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 bg-blue-600 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.3)]"></div>
-            <span className="text-slate-900 font-bold tracking-tight text-lg">SOSTicket<span className="text-blue-600">.</span></span>
+            <div className="w-6 h-6 bg-[#7c3aed] rounded-full shadow-[0_0_15px_rgba(124,58,237,0.3)]"></div>
+            <span className="text-slate-900 font-bold tracking-tight text-lg">SOS Contábeis<span className="text-[#7c3aed]">.</span></span>
           </div>
 
           <div className="space-y-8 relative z-10">
             <div>
-              <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-3">Bem-vindo de volta</p>
-              <h1 className="text-4xl font-black text-slate-900 tracking-tight">Entrar na conta<span className="text-blue-600">.</span></h1>
+              <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-3">Portal do Cliente & Equipa</p>
+              <h1 className="text-4xl font-black text-slate-900 tracking-tight">Aceder à conta<span className="text-[#7c3aed]">.</span></h1>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -53,11 +53,11 @@ export function Login() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-50 border-2 border-transparent text-slate-900 px-5 py-4 rounded-2xl focus:border-blue-500/30 focus:bg-white transition-all outline-none text-sm placeholder:text-slate-300 font-medium"
-                    placeholder="exemplo@sosticket.pt"
+                    className="w-full bg-slate-50 border-2 border-transparent text-slate-900 px-5 py-4 rounded-2xl focus:border-[#7c3aed]/30 focus:bg-white transition-all outline-none text-sm placeholder:text-slate-300 font-medium"
+                    placeholder="geral@empresa.com"
                     required
                   />
-                  <Mail className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-blue-600 transition-colors" />
+                  <Mail className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-[#7c3aed] transition-colors" />
                 </div>
               </div>
 
@@ -65,14 +65,14 @@ export function Login() {
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center px-1">
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Palavra-passe</label>
-                  <button type="button" className="text-[10px] font-bold text-blue-600 hover:text-blue-700 transition-colors uppercase tracking-tight">Esqueceu a senha?</button>
+                  <button type="button" className="text-[10px] font-bold text-[#7c3aed] hover:text-[#630ed4] transition-colors uppercase tracking-tight">Esqueceu a senha?</button>
                 </div>
                 <div className="relative group">
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-50 border-2 border-transparent text-slate-900 px-5 py-4 rounded-2xl focus:border-blue-500/30 focus:bg-white transition-all outline-none text-sm placeholder:text-slate-300 font-medium"
+                    className="w-full bg-slate-50 border-2 border-transparent text-slate-900 px-5 py-4 rounded-2xl focus:border-[#7c3aed]/30 focus:bg-white transition-all outline-none text-sm placeholder:text-slate-300 font-medium"
                     placeholder="••••••••••••"
                     required
                   />
@@ -103,13 +103,13 @@ export function Login() {
                 <button
                   type="submit"
                   disabled={carregando}
-                  className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 transition-all shadow-[0_10px_20px_rgba(37,99,235,0.15)] flex-[2] flex items-center justify-center gap-2 group"
+                  className="px-8 py-4 bg-[#7c3aed] text-white rounded-2xl font-black text-sm hover:bg-[#630ed4] disabled:bg-slate-200 disabled:text-slate-400 transition-all shadow-[0_10px_20px_rgba(124,58,237,0.15)] flex-[2] flex items-center justify-center gap-2 group"
                 >
                   {carregando ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   ) : (
                     <>
-                      Aceder ao Sistema
+                      Entrar no Sistema
                       <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </>
                   )}
@@ -119,30 +119,30 @@ export function Login() {
           </div>
 
           <div className="text-[10px] text-slate-300 font-bold uppercase tracking-[0.2em] mt-8">
-            © 2026 Safira TECNOLOGIA • TODOS OS DIREITOS RESERVADOS
+            © 2026 Electro Soft • TODOS OS DIREITOS RESERVADOS
           </div>
 
           {/* Decoração sutil */}
-          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-blue-500/5 rounded-full blur-[80px]"></div>
+          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-[#7c3aed]/5 rounded-full blur-[80px]"></div>
         </div>
 
         {/* Lado Direito: Imagem/Visual com Sobreposição Gradual */}
         <div className="hidden lg:block absolute inset-y-0 right-0 w-[70%] z-10">
           <div className="absolute inset-0 z-20 bg-gradient-to-r from-white via-white/40 to-transparent"></div>
           <img
-            src="https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&q=80&w=2070"
+            src="https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&q=80&w=2070"
             className="w-full h-full object-cover grayscale-[5%] brightness-95"
-            alt="Suporte Técnico"
+            alt="Suporte Contábil e Fiscal"
           />
 
           <div className="absolute bottom-12 right-12 z-20">
             <div className="p-6 bg-white/40 backdrop-blur-xl rounded-[32px] border border-white/60 max-w-xs shadow-xl animate-in slide-in-from-bottom-8 duration-700">
               <p className="text-slate-800 text-xs font-bold leading-relaxed">
-                A melhor maneira de prever o futuro é criá-lo. Gestão eficiente de suporte técnico.
+                Gestão eficiente de tickets de contabilidade, fiscalidade e auditoria corporativa.
               </p>
               <div className="mt-4 flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white shadow-lg">CL</div>
-                <span className="text-slate-500 text-[10px] font-black uppercase tracking-wider">Equipa Safira</span>
+                <div className="w-6 h-6 rounded-full bg-[#7c3aed] flex items-center justify-center text-[10px] font-bold text-white shadow-lg">ES</div>
+                <span className="text-slate-500 text-[10px] font-black uppercase tracking-wider">Electro Soft</span>
               </div>
             </div>
           </div>
@@ -151,7 +151,7 @@ export function Login() {
           <div className="absolute bottom-12 right-12 z-20">
             <div className="flex flex-col items-end opacity-10">
               <span className="text-slate-900 font-black text-5xl tracking-tighter leading-none">SOS</span>
-              <span className="text-slate-900 font-black text-5xl tracking-tighter leading-none">TKT</span>
+              <span className="text-slate-900 font-black text-5xl tracking-tighter leading-none">ACC</span>
             </div>
           </div>
         </div>
