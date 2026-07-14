@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search, Plus, Send, Paperclip, Smile, X, MoreVertical, Loader2,
-  CheckCircle2, AlertCircle, Camera, FileText, Film, MessageCircle,
+  CheckCircle2, AlertCircle, FileText, Film, MessageCircle,
   Pencil, Trash2, Clock, ArrowLeft, SlidersHorizontal, Check,
   Bot, ClipboardList, UploadCloud, Image as ImageIcon,
 } from 'lucide-react';
@@ -119,7 +119,6 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
   const [enviandoAnexo, setEnviandoAnexo] = useState(false);
   const fimDaThreadRef = useRef<HTMLDivElement>(null);
   const inputAnexoRef = useRef<HTMLInputElement>(null);
-  const jaTentouHandoff = useRef(false);
 
   const modoChat = exibirModalNovo || (exibirModalDetalhes && !!intervencaoDetalhe);
 
@@ -129,15 +128,17 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
     return () => ocultarChrome(false);
   }, [modoChat, ocultarChrome]);
 
-  // Recebe um atendimento pré-selecionado (ou o pedido de abrir um novo) vindo do Dashboard
+  // Recebe um atendimento pré-selecionado (ou o pedido de abrir um novo) vindo do Dashboard.
+  // IMPORTANTE: sem guard — o sinal é destrutivo (consumido após leitura), então é seguro
+  // correr sempre que a view monta, incluindo após navegação do dashboard.
   useEffect(() => {
-    if (jaTentouHandoff.current) return;
-    jaTentouHandoff.current = true;
     const idSelecionado = consumirIntervencaoSelecionada();
     if (idSelecionado) {
       setExibirModalNovo(false);
       handleVerDetalhes(idSelecionado);
-    } else if (consumirSinalNovoAtendimento()) {
+      return;
+    }
+    if (consumirSinalNovoAtendimento()) {
       setExibirModalDetalhes(false);
       setExibirModalNovo(true);
     }
@@ -407,12 +408,24 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
   }
 
   return (
-    <div className="px-4 pt-4 space-y-4">
-      <div>
-        <h2 className="cliente-font-heading text-2xl font-bold text-[#191c1e]">Atendimentos</h2>
-        <p className="text-sm text-[#4a4455] mt-0.5">Portal Contábil Digital</p>
+    <div className="w-full max-w-2xl mx-auto px-4 pt-4 space-y-4">
+      {/* Cabeçalho da lista */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="cliente-font-heading text-2xl font-bold text-[#191c1e]">Atendimentos</h2>
+          <p className="text-sm text-[#4a4455] mt-0.5">Acompanhe os seus pedidos de suporte</p>
+        </div>
+        {/* Botão Nova Intervenção visível em desktop (≥ md) */}
+        <button
+          onClick={abrirComposer}
+          className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-[#7c3aed] text-white text-sm font-bold rounded-full shadow-lg shadow-[#7c3aed]/25 hover:bg-[#630ed4] transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          Nova Intervenção
+        </button>
       </div>
 
+      {/* Barra de pesquisa + filtro */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4a4455]" />
@@ -427,6 +440,7 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
           <button
             onClick={() => setFiltroPrioridadeAberto((v) => !v)}
             className={`p-3 rounded-full border transition-colors ${filtroPrioridade ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'bg-white text-[#4a4455] border-[#e5e7eb]'}`}
+            title="Filtrar por prioridade"
           >
             <SlidersHorizontal className="w-4 h-4" />
           </button>
@@ -449,13 +463,16 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
         </div>
       </div>
 
+      {/* Chips de filtro por status */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
         {FILTROS_STATUS.map((f) => (
           <button
             key={f.valor}
             onClick={() => setFiltroStatus(f.valor)}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
-              filtroStatus === f.valor ? 'bg-[#7c3aed] text-white' : 'bg-[#eceef0] text-[#4a4455]'
+            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all ${
+              filtroStatus === f.valor
+                ? 'bg-[#7c3aed] text-white shadow-md shadow-[#7c3aed]/25'
+                : 'bg-[#eceef0] text-[#4a4455] hover:bg-[#e2d4f0]'
             }`}
           >
             {f.label}
@@ -464,16 +481,20 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
       </div>
 
       {erro && (
-        <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-700 text-xs font-semibold">{erro}</div>
+        <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />{erro}
+        </div>
       )}
 
-      <div className="space-y-3 pb-4">
+      {/* Lista de atendimentos */}
+      <div className="space-y-3 pb-28 md:pb-8">
         {carregando ? (
           Array(3).fill(0).map((_, i) => <div key={i} className="h-24 bg-white/60 rounded-[18px] animate-pulse" />)
         ) : listaFiltrada.length === 0 ? (
           <div className="py-16 text-center">
-            <MessageCircle className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">Nenhum atendimento encontrado.</p>
+            <MessageCircle className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-gray-400">Nenhum atendimento encontrado.</p>
+            <p className="text-xs text-gray-300 mt-1">Abra o seu primeiro pedido de suporte.</p>
           </div>
         ) : (
           listaFiltrada.map((intervencao) => (
@@ -498,10 +519,12 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
         )}
       </div>
 
+      {/* FAB — apenas em mobile */}
       <button
         onClick={abrirComposer}
-        className="fixed bottom-24 right-5 z-30 w-14 h-14 bg-[#7c3aed] text-white rounded-full shadow-xl shadow-[#7c3aed]/30 flex items-center justify-center hover:bg-[#630ed4] transition-colors"
+        className="md:hidden fixed bottom-24 right-5 z-30 w-14 h-14 bg-[#7c3aed] text-white rounded-full shadow-xl shadow-[#7c3aed]/30 flex items-center justify-center hover:bg-[#630ed4] active:scale-95 transition-all"
         title="Novo Atendimento"
+        aria-label="Novo Atendimento"
       >
         <Plus className="w-6 h-6" />
       </button>
@@ -643,7 +666,7 @@ function CardSecao({ icon: Icon, titulo, children }: { icon: any; titulo: string
   );
 }
 
-function NovoAtendimentoOld({
+function NovoAtendimento({
   novoTicket, setNovoTicket, contratos, status, carregando, erro, onVoltar, onSubmit,
 }: {
   novoTicket: NovoTicketState;
@@ -656,72 +679,99 @@ function NovoAtendimentoOld({
   onSubmit: (e: React.FormEvent) => void | Promise<void>;
 }) {
   return (
-    <div className="fixed inset-0 z-30 flex flex-col bg-white cliente-font-body">
-      <div className="flex-shrink-0 flex items-center gap-3 px-3 py-3 bg-white border-b border-[#e5e7eb]">
+    <div className="fixed inset-0 z-30 flex flex-col bg-[#f7f9fb] cliente-font-body">
+      <div className="flex-shrink-0 flex items-center justify-between px-3 py-3 bg-white border-b border-[#e5e7eb]">
         <button onClick={onVoltar} className="p-2 text-[#191c1e] hover:bg-gray-100 rounded-full">
-          <ArrowLeft className="w-5 h-5" />
+          <X className="w-5 h-5" />
         </button>
-        <p className="cliente-font-heading text-[15px] font-bold text-[#630ed4]">Novo Atendimento Contábil</p>
+        <p className="cliente-font-heading text-base font-bold text-[#630ed4]">Novo Atendimento</p>
+        <div className="w-9 h-9 rounded-full bg-[#ede0ff] text-[#630ed4] flex items-center justify-center">
+          <Bot className="w-4 h-4" />
+        </div>
       </div>
 
-      <form onSubmit={onSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-[#4a4455] uppercase tracking-widest ml-1">Assunto do Atendimento *</label>
-          <input
-            required
-            value={novoTicket.titulo}
-            onChange={(e) => setNovoTicket((prev) => ({ ...prev, titulo: e.target.value }))}
-            className="w-full px-4 py-3 bg-white border border-[#e5e7eb] rounded-[14px] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 outline-none transition-all text-sm"
-            placeholder="Ex.: Emissão de fatura, dúvida fiscal, envio de documentos..."
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-[#4a4455] uppercase tracking-widest ml-1">Descreva a sua Solicitação *</label>
-          <textarea
-            required
-            rows={4}
-            value={novoTicket.descricao}
-            onChange={(e) => setNovoTicket((prev) => ({ ...prev, descricao: e.target.value }))}
-            className="w-full px-4 py-3 bg-white border border-[#e5e7eb] rounded-[14px] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 outline-none transition-all text-sm resize-none"
-            placeholder="Essa mensagem será a primeira da conversa..."
-          />
-        </div>
-
-        {contratos.length !== 1 && (
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-[#4a4455] uppercase tracking-widest ml-1">Contrato Relacionado</label>
-            <select
-              value={novoTicket.contrato_id}
-              onChange={(e) => setNovoTicket((prev) => ({ ...prev, contrato_id: e.target.value }))}
-              className="w-full px-4 py-3 bg-white border border-[#e5e7eb] rounded-[14px] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 outline-none transition-all text-sm"
-            >
-              <option value="">Selecione...</option>
-              {contratos.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {(c.tipo_contrato || c.tipo_de_pagamento || 'Contrato').toUpperCase()} (#{c.numero || c.id.substring(0, 4).toUpperCase()})
-                </option>
-              ))}
-            </select>
+      <form id="novo-atendimento-form" onSubmit={onSubmit} className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
+        {/* Mensagem do assistente */}
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-[#ede0ff] text-[#7c3aed] flex items-center justify-center flex-shrink-0">
+            <Bot className="w-5 h-5" />
           </div>
-        )}
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-[#4a4455] uppercase tracking-widest ml-1">Prioridade</label>
-          <select
-            value={novoTicket.prioridade}
-            onChange={(e) => setNovoTicket((prev) => ({ ...prev, prioridade: e.target.value }))}
-            className="w-full px-4 py-3 bg-white border border-[#e5e7eb] rounded-[14px] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 outline-none transition-all text-sm"
-          >
-            <option value="baixa">Baixa</option>
-            <option value="media">Média</option>
-            <option value="alta">Alta</option>
-            <option value="urgente">Urgente</option>
-          </select>
+          <div className="bg-white rounded-[18px] rounded-tl-[4px] shadow-sm p-4 max-w-[85%]">
+            <p className="text-sm text-[#191c1e] leading-relaxed">
+              Olá! Para abrirmos um novo atendimento, por favor preencha os detalhes abaixo. O seu gabinete de contabilidade será notificado.
+            </p>
+            <p className="text-[11px] text-[#4a4455] mt-2">Assistente SOS · Agora</p>
+          </div>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-[#4a4455] uppercase tracking-widest ml-1">Anexos / Documentos</label>
+        <CardSecao icon={ClipboardList} titulo="Identificação da Solicitação">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#4a4455]">Assunto do Atendimento</label>
+            <input
+              required
+              value={novoTicket.titulo}
+              onChange={(e) => setNovoTicket((prev) => ({ ...prev, titulo: e.target.value }))}
+              className="w-full px-4 py-3 bg-[#f7f9fb] border border-transparent rounded-[12px] focus:bg-white focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 outline-none transition-all text-sm"
+              placeholder="Ex.: Emissão de fatura, dúvida fiscal..."
+            />
+          </div>
+
+          {contratos.length !== 1 && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#4a4455]">Contrato Relacionado</label>
+              <select
+                value={novoTicket.contrato_id}
+                onChange={(e) => setNovoTicket((prev) => ({ ...prev, contrato_id: e.target.value }))}
+                className="w-full px-4 py-3 bg-[#f7f9fb] border border-transparent rounded-[12px] focus:bg-white focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 outline-none transition-all text-sm"
+              >
+                <option value="">Selecione um contrato ativo</option>
+                {contratos.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {(c.tipo_contrato || c.tipo_de_pagamento || 'Contrato').toUpperCase()} (#{c.numero || c.id.substring(0, 4).toUpperCase()})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </CardSecao>
+
+        <CardSecao icon={FileText} titulo="Descrição Detalhada">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#4a4455]">Descreva o pedido</label>
+            <textarea
+              required
+              rows={4}
+              value={novoTicket.descricao}
+              onChange={(e) => setNovoTicket((prev) => ({ ...prev, descricao: e.target.value }))}
+              className="w-full px-4 py-3 bg-[#f7f9fb] border border-transparent rounded-[12px] focus:bg-white focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 outline-none transition-all text-sm resize-none"
+              placeholder="Forneça o máximo de detalhes possível para agilizar o atendimento..."
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-[#4a4455]">Nível de Prioridade</label>
+            <div className="flex flex-wrap gap-2">
+              {NIVEIS_PRIORIDADE.map((nivel) => {
+                const ativo = novoTicket.prioridade === nivel.valor;
+                return (
+                  <button
+                    key={nivel.valor}
+                    type="button"
+                    onClick={() => setNovoTicket((prev) => ({ ...prev, prioridade: nivel.valor }))}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold border transition-all ${
+                      ativo ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'bg-white text-[#191c1e] border-[#e5e7eb]'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${ativo ? 'bg-white' : nivel.dot}`} />
+                    {nivel.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </CardSecao>
+
+        <CardSecao icon={UploadCloud} titulo="Anexos & Evidências">
           <input
             type="file"
             id="cliente-input-anexo-novo"
@@ -738,70 +788,73 @@ function NovoAtendimentoOld({
           <button
             type="button"
             onClick={() => document.getElementById('cliente-input-anexo-novo')?.click()}
-            className="w-full flex items-center justify-center gap-3 px-4 py-4 bg-white border-2 border-dashed border-[#e5e7eb] rounded-[14px] hover:border-[#7c3aed] hover:bg-[#ede0ff]/30 transition-all group"
+            className="w-full flex flex-col items-center justify-center gap-2 px-4 py-8 bg-[#f7f9fb] border-2 border-dashed border-[#ccc3d8] rounded-[12px] hover:border-[#7c3aed] hover:bg-[#ede0ff]/30 transition-all group"
           >
-            <Camera className="w-5 h-5 text-[#4a4455] group-hover:text-[#7c3aed]" />
-            <span className="text-sm font-semibold text-[#4a4455] group-hover:text-[#7c3aed]">Anexar Documento ou Foto</span>
+            <UploadCloud className="w-7 h-7 text-[#4a4455] group-hover:text-[#7c3aed]" />
+            <span className="text-sm font-semibold text-[#191c1e]">Arraste arquivos ou clique para buscar</span>
+            <span className="text-xs text-[#4a4455]">PNG, JPG, PDF (Máx. 10MB por arquivo)</span>
           </button>
 
           {novoTicket.anexos.length > 0 && (
-            <div className="flex flex-wrap gap-3 mt-3">
+            <div className="space-y-2">
               {novoTicket.anexos.map((anexo, i) => (
-                <div key={i} className="relative group">
-                  <div className="w-20 h-20 bg-[#ede0ff] rounded-xl flex flex-col items-center justify-center text-[#7c3aed] border-2 border-violet-200 px-2 text-center">
-                    <Paperclip className="w-6 h-6" />
-                    <span className="mt-1 text-[9px] font-semibold text-gray-600 leading-tight truncate w-full">{anexo.name}</span>
+                <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-[#f7f9fb] rounded-[12px]">
+                  <div className="w-9 h-9 rounded-lg bg-[#ede0ff] text-[#7c3aed] flex items-center justify-center flex-shrink-0">
+                    <ImageIcon className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[#191c1e] truncate">{anexo.name}</p>
+                    <p className="text-xs text-[#4a4455]">{(anexo.size / 1024 / 1024).toFixed(1)} MB</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setNovoTicket((prev) => ({ ...prev, anexos: prev.anexos.filter((_, idx) => idx !== i) }))}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg flex-shrink-0"
                   >
-                    <X className="w-3 h-3" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </CardSecao>
 
         {erro && (
           <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
             <AlertCircle className="w-4 h-4" /> {erro}
           </div>
         )}
-
-        <div className="flex items-center gap-3 pt-2 pb-4">
-          <button
-            type="button"
-            onClick={onVoltar}
-            className="flex-1 py-3.5 text-sm font-bold text-[#4a4455] uppercase tracking-widest hover:bg-gray-100 rounded-[14px] transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={carregando || status === 'success'}
-            className={`flex-[2] py-3.5 rounded-[14px] text-sm font-bold uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 ${
-              status === 'success'
-                ? 'bg-emerald-500 text-white'
-                : status === 'error'
-                ? 'bg-red-500 text-white'
-                : 'bg-[#7c3aed] text-white hover:bg-[#630ed4]'
-            } disabled:opacity-50`}
-          >
-            {status === 'loading' ? (
-              <><Loader2 className="w-5 h-5 animate-spin" /><span>Enviando...</span></>
-            ) : status === 'success' ? (
-              <><CheckCircle2 className="w-5 h-5" /><span>Atendimento aberto!</span></>
-            ) : status === 'error' ? (
-              <><AlertCircle className="w-5 h-5" /><span>Erro no envio</span></>
-            ) : (
-              <><Send className="w-5 h-5" /><span>Enviar Solicitação</span></>
-            )}
-          </button>
-        </div>
       </form>
+
+      <div className="flex-shrink-0 p-4 bg-white border-t border-[#e5e7eb]">
+        <button
+          type="submit"
+          form="novo-atendimento-form"
+          disabled={carregando || status === 'success'}
+          className={`w-full py-4 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
+            status === 'success'
+              ? 'bg-emerald-500 text-white'
+              : status === 'error'
+              ? 'bg-red-500 text-white'
+              : 'bg-[#7c3aed] text-white hover:bg-[#630ed4]'
+          } disabled:opacity-50`}
+        >
+          {status === 'loading' ? (
+            <><Loader2 className="w-5 h-5 animate-spin" /><span>Enviando...</span></>
+          ) : status === 'success' ? (
+            <><CheckCircle2 className="w-5 h-5" /><span>Atendimento aberto!</span></>
+          ) : status === 'error' ? (
+            <><AlertCircle className="w-5 h-5" /><span>Erro no envio</span></>
+          ) : (
+            <>
+              <span>Enviar Pedido de Atendimento</span>
+              <span className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
+                <Send className="w-4 h-4" />
+              </span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }

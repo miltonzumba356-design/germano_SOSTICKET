@@ -53,7 +53,8 @@ export function ClientePerfilView({
   }
 
   return (
-    <div className="flex h-[calc(100vh-7.5rem)] bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className="w-full max-w-4xl mx-auto px-2 sm:px-4 py-4">
+    <div className="flex h-[calc(100vh-10rem)] bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       {/* Coluna esquerda: identidade + navegação de configurações */}
       <aside className="w-full sm:w-[320px] flex-shrink-0 border-r border-gray-100 flex flex-col bg-gray-50/40">
         <div className="p-6 text-center border-b border-gray-100 bg-white">
@@ -130,6 +131,7 @@ export function ClientePerfilView({
           </div>
         </div>
       </section>
+    </div>
     </div>
   );
 }

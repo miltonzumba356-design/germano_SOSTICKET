@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRealtimeSignal } from '../hooks/useRealtimeSignal';
 import type { ReactNode } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -684,7 +684,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full min-w-[540px] text-left">
               <thead>
                 <tr className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                   <th className="px-6 py-4">Ticket</th>
@@ -744,7 +744,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
+              <table className="w-full min-w-[540px] text-left">
                 <thead>
                   <tr className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     <th className="px-6 py-4">Contrato</th>
@@ -781,7 +781,11 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
           <div className="p-3 bg-red-100 rounded-xl shadow-sm"><AlertCircle className="w-6 h-6 text-red-600" /></div>
           <div className="flex-1">
             <p className="text-sm font-bold text-red-900">Contratos expirando</p>
-            <p className="text-xs text-red-700 mt-1">Existem 2 contratos que vencem nos próximos 30 dias. Ação necessária.</p>
+            <p className="text-xs text-red-700 mt-1">
+              {contratosExpira.length > 0
+                ? `${contratosExpira.length} contrato${contratosExpira.length > 1 ? 's vencem' : ' vence'} nos próximos 30 dias. Ação necessária.`
+                : 'Nenhum contrato a expirar nos próximos 30 dias.'}
+            </p>
           </div>
           {menu('alerta-contratos', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }])}
         </div>
@@ -789,17 +793,25 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
           <div className="p-3 bg-amber-100 rounded-xl shadow-sm"><Users className="w-6 h-6 text-amber-600" /></div>
           <div className="flex-1">
             <p className="text-sm font-bold text-amber-900">Sem Técnico</p>
-            <p className="text-xs text-amber-700 mt-1">3 intervenções abertas aguardam atribuição de técnico.</p>
+            <p className="text-xs text-amber-700 mt-1">
+              {(dadosDashboard?.intervencoes_sem_tecnico ?? dadosDashboard?.tickets_sem_tecnico ?? 0) > 0
+                ? `${dadosDashboard?.intervencoes_sem_tecnico ?? dadosDashboard?.tickets_sem_tecnico} intervenções abertas aguardam atribuição de técnico.`
+                : 'Todas as intervenções possuem técnico atribuído.'}
+            </p>
           </div>
           {menu('alerta-tecnicos', [atualizarItem, { label: 'Ver intervenções', onClick: () => onNavigate?.('intervencoes') }, { label: 'Ver técnicos', onClick: () => onNavigate?.('tecnicos') }])}
         </div>
         <div className="relative bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex items-start gap-4 hover:shadow-lg hover:shadow-indigo-50 transition-all duration-300">
           <div className="p-3 bg-indigo-100 rounded-xl shadow-sm"><TrendingUp className="w-6 h-6 text-indigo-600" /></div>
           <div className="flex-1">
-            <p className="text-sm font-bold text-indigo-900">Consumo de Horas</p>
-            <p className="text-xs text-indigo-700 mt-1">Cliente Safir atingiu 85% do pacote de horas mensal.</p>
+            <p className="text-sm font-bold text-indigo-900">Receita do Mês</p>
+            <p className="text-xs text-indigo-700 mt-1">
+              Total acumulado: {(
+                dadosDashboard?.receita_total ?? dadosDashboard?.total_receita ?? 0
+              ).toLocaleString('pt-PT')} Kz
+            </p>
           </div>
-          {menu('alerta-horas', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }, { label: 'Ver horas', onClick: () => onNavigate?.('horas') }])}
+          {menu('alerta-horas', [atualizarItem, { label: 'Ver contratos', onClick: () => onNavigate?.('contratos') }, { label: 'Ver relatórios', onClick: () => onNavigate?.('relatorios') }])}
         </div>
       </div>
     </div>
