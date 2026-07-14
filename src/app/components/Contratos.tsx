@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Contrato, Empresa } from '../types/api';
@@ -84,7 +84,7 @@ function contratoHtml(contrato: Contrato, autoPrint = false) {
   <div class="document">
     <div class="header">
       <div>
-        <h1>SOSTicket</h1>
+        <h1>SOSContabeis</h1>
         <p class="muted">AssistÃªncia TÃ©cnica e Consultoria</p>
         <div class="contacts">
           <div><strong>Tel:</strong> +244 9XX XXX XXX</div>
@@ -120,7 +120,7 @@ function contratoHtml(contrato: Contrato, autoPrint = false) {
       <div class="assinatura"><div class="linha">ResponsÃ¡vel TÃ©cnico</div></div>
       <div class="assinatura"><div class="linha">Cliente</div></div>
     </div>
-    <div class="footer">Documento gerado automaticamente pelo sistema SOSTicket.</div>
+    <div class="footer">Documento gerado automaticamente pelo sistema SOSContabeis.</div>
   </div>
   ${autoPrint ? '<script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));</script>' : ''}
 </body>

@@ -135,11 +135,11 @@ function tocarSomNotificacao() {
 function enviarNotificacaoOS(titulo: string, corpo: string) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   try {
-    const n = new Notification('SOSTicket', {
+    const n = new Notification('SOSContabeis', {
       body: `${titulo}${corpo ? `\n${corpo}` : ''}`,
       icon: '/favicon.ico',
       badge: '/favicon.ico',
-      tag: 'sosticket-notif',
+      tag: 'soscontabeis-notif',
       renotify: true,
     });
     window.setTimeout(() => n.close(), 7000);

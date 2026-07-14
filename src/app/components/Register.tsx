@@ -84,7 +84,7 @@ export function Register({ onBackToLogin }: { onBackToLogin: () => void }) {
         {/* Lado Esquerdo - Info */}
         <div className="md:w-1/3 bg-indigo-600 p-8 text-white flex flex-col justify-between">
           <div>
-            <h1 className="text-2xl font-black mb-2">SOSTicket</h1>
+            <h1 className="text-2xl font-black mb-2">SOSContabeis</h1>
             <p className="text-indigo-100 text-xs font-medium uppercase tracking-widest">Crie sua conta</p>
           </div>
           <div className="space-y-4">

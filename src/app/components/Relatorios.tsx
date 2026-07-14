@@ -184,7 +184,7 @@ function criarPdfRelatorio({
   pdf.text(TITULOS_RELATORIO[tipo], margin, 16);
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(9);
-  pdf.text('Sistema SOSTicket', margin, 24);
+  pdf.text('Sistema SOSContabeis', margin, 24);
   pdf.text(usuario?.nome || usuario?.email || 'Utilizador', pageWidth - margin, 16, { align: 'right' });
   y = 44;
 

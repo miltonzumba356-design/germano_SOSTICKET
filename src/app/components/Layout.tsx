@@ -144,7 +144,7 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
             >
               {menuAberto ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-            <h1 className="text-xl font-bold text-theme-primary">SOSTicket</h1>
+            <h1 className="text-xl font-bold text-theme-primary">SOSContabeis</h1>
           </div>
           <div className="flex items-center gap-4">
             <div className="relative">
