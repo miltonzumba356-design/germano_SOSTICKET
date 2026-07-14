@@ -1,0 +1,32 @@
+/* Tipografia do Portal Contábil Digital (perfil cliente), conforme DESIGN.md.
+   Auto-contido: só é carregado quando o ClienteShell é montado (perfil = cliente),
+   não afeta os perfis admin/técnico nem nenhum arquivo global. */
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+.cliente-pwa {
+  --cliente-surface: #f7f9fb;
+  --cliente-surface-lowest: #ffffff;
+  --cliente-surface-container: #eceef0;
+  --cliente-on-surface: #191c1e;
+  --cliente-on-surface-variant: #4a4455;
+  --cliente-outline-variant: #ccc3d8;
+  --cliente-primary: #7c3aed;
+  --cliente-primary-strong: #630ed4;
+  --cliente-on-primary: #ffffff;
+  --cliente-primary-fixed: #ede0ff;
+  --cliente-client-bubble: #7c3aed;
+  --cliente-tech-bubble: #f1f5f9;
+}
+
+.cliente-font-heading {
+  font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.cliente-font-body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+.cliente-font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}

@@ -27,6 +27,7 @@ interface LayoutProps {
 }
 
 import { WidgetCronometro } from './WidgetCronometro';
+import { ClienteShell } from './cliente/ClienteShell';
 
 export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
   const { usuario, logout } = useAuth();
@@ -104,6 +105,15 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
   };
 
   const menuItems = getMenuItems();
+
+  // Perfil Cliente: shell mobile (PWA) dedicado, conforme DESIGN.md — header simplificado + barra de abas no rodapé.
+  if (usuario?.perfil === 'cliente') {
+    return (
+      <ClienteShell usuario={usuario} paginaAtual={paginaAtual} onNavigate={onNavigate} onLogout={tentarLogout}>
+        {children}
+      </ClienteShell>
+    );
+  }
 
   return (
     <div className={`min-h-screen bg-gray-50 ${

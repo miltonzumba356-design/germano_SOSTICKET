@@ -1,7 +1,8 @@
+import { Wifi, KeyRound, Database, FileText, Server, MessageCircle, type LucideIcon } from 'lucide-react';
 import type { Empresa, Intervencao } from '../../types/api';
 
 export const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  aberto: { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500', label: 'Aberto' },
+  aberto: { bg: 'bg-violet-100', text: 'text-violet-700', dot: 'bg-violet-500', label: 'Aberto' },
   em_andamento: { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500', label: 'Em Atendimento' },
   resolvido: { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Resolvido' },
   fechado: { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-400', label: 'Fechado' },
@@ -103,6 +104,17 @@ export function categoriaLabel(tipo?: string) {
     .join(' ');
 }
 
+// Ícone do card de atendimento, inferido a partir da categoria/título já existentes (sem novo campo no backend).
+export function categoriaIcon(intervencao: Intervencao): LucideIcon {
+  const texto = `${intervencao.tipo_intervencao || ''} ${intervencao.titulo || ''}`.toLowerCase();
+  if (/contrat/.test(texto)) return FileText;
+  if (/senha|credencia|acesso|login|utilizador/.test(texto)) return KeyRound;
+  if (/migra|dados|backup|banco|base de dados/.test(texto)) return Database;
+  if (/servidor|sistema|instala/.test(texto)) return Server;
+  if (/rede|conex|internet|wifi|fibra/.test(texto)) return Wifi;
+  return MessageCircle;
+}
+
 export function nomeEmpresa(empresa?: string | Empresa | null) {
   if (!empresa) return '';
   if (typeof empresa === 'string') return empresa;
@@ -186,6 +198,23 @@ export function consumirIntervencaoSelecionada(): string | null {
     return id;
   } catch {
     return null;
+  }
+}
+
+// Handoff do FAB do Dashboard para abrir diretamente o composer de "Novo Atendimento".
+const CHAVE_NOVO_ATENDIMENTO = 'sosticket_cliente_abrir_novo_atendimento';
+
+export function sinalizarNovoAtendimento() {
+  try { localStorage.setItem(CHAVE_NOVO_ATENDIMENTO, '1'); } catch { /* ignore */ }
+}
+
+export function consumirSinalNovoAtendimento(): boolean {
+  try {
+    const sinal = localStorage.getItem(CHAVE_NOVO_ATENDIMENTO);
+    if (sinal) localStorage.removeItem(CHAVE_NOVO_ATENDIMENTO);
+    return !!sinal;
+  } catch {
+    return false;
   }
 }
 
