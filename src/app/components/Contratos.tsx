@@ -5,6 +5,7 @@ import { Contrato, Empresa } from '../types/api';
 import { formatarHoras } from '../utils/formatters';
 import { contratosService, empresasService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { ClienteContratosView } from './cliente/ClienteContratosView';
 import { 
   Plus, 
   Search, 
@@ -410,6 +411,26 @@ export function Contratos() {
       setCarregando(false);
     }
   };
+
+  // Perfil Cliente: layout lista + detalhe, reaproveitando os mesmos dados/handlers já existentes acima.
+  if (isCliente) {
+    return (
+      <ClienteContratosView
+        contratos={contratos}
+        carregando={carregando}
+        erro={erro}
+        busca={busca}
+        setBusca={setBusca}
+        filtroStatus={filtroStatus}
+        setFiltroStatus={setFiltroStatus}
+        contratoDetalhe={contratoDetalhe}
+        exibirModalDetalhes={exibirModalDetalhes}
+        setExibirModalDetalhes={setExibirModalDetalhes}
+        handleVerDetalhes={handleVerDetalhes}
+        handleBaixarPdf={handleBaixarPdf}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">

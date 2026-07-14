@@ -6,6 +6,7 @@ import { intervencoesService, contratosService, clientesService, tecnicosService
 import { useAuth } from '../contexts/AuthContext';
 import { useCronometro } from '../contexts/CronometroContext';
 import { formatarHoras } from '../utils/formatters';
+import { ClienteIntervencoesView } from './cliente/ClienteIntervencoesView';
 import {
   Search,
   Plus,
@@ -469,7 +470,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         throw new Error('Não foi possível identificar o cliente do contrato.');
       }
 
-      await intervencoesService.criar({
+      const criado: any = await intervencoesService.criar({
         titulo: novoTicket.titulo.trim(),
         descricao: novoTicket.descricao.trim(),
         ...(clienteIdFinal ? { cliente_id: clienteIdFinal } : {}),
@@ -479,13 +480,18 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         tipo_intervencao: contratoSelecionado?.tipo_contrato || 'suporte',
         anexos: novoTicket.anexos
       });
-      
+
       setStatus('success');
       setTimeout(() => {
         setExibirModalNovo(false);
         setNovoTicket({ titulo: '', descricao: '', cliente_id: '', contrato_id: '', prioridade: 'media', anexos: [] });
         setStatus('idle');
         carregarIntervencoes();
+        // Perfil cliente: abre automaticamente a conversa recém-criada (composer inline em vez de modal)
+        const criadoId = criado?.id || criado?.data?.id;
+        if (isCliente && criadoId) {
+          handleVerDetalhes(criadoId);
+        }
       }, 1500);
     } catch (err: any) {
       console.error('Erro ao criar intervenção:', err);
@@ -532,6 +538,22 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
       setIntervencaoDetalhe(data);
     } catch (err) {
       console.error('Erro ao enviar comentário:', err);
+    }
+  };
+
+  // Usado apenas pela conversa do perfil cliente (anexar arquivo dentro do chat).
+  // Reaproveita o endpoint já existente POST /intervencoes/:id/anexos.
+  const handleUploadAnexo = async (intervencaoId: string, file: File) => {
+    try {
+      await intervencoesService.carregarAnexo(intervencaoId, file);
+      if (intervencaoDetalhe?.id === intervencaoId) {
+        const atualizada = await intervencoesService.obterPorId(intervencaoId);
+        setIntervencaoDetalhe(atualizada);
+      }
+      await carregarIntervencoes(true);
+    } catch (err: any) {
+      console.error('Erro ao anexar arquivo:', err);
+      setErro(err.message || 'Falha ao anexar arquivo.');
     }
   };
 
@@ -631,6 +653,52 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
       setErro(err.message || 'Falha ao concluir a intervenção.');
     }
   };
+
+  // Perfil Cliente: experiência conversacional (estilo WhatsApp), toda a lógica acima é reaproveitada tal como está.
+  if (isCliente) {
+    return (
+      <ClienteIntervencoesView
+        usuario={usuario}
+        intervencoes={intervencoes}
+        carregando={carregando}
+        erro={erro}
+        busca={busca}
+        setBusca={setBusca}
+        filtroStatus={filtroStatus}
+        setFiltroStatus={setFiltroStatus}
+        filtroPrioridade={filtroPrioridade}
+        setFiltroPrioridade={setFiltroPrioridade}
+        pagina={pagina}
+        setPagina={setPagina}
+        totalPaginas={totalPaginas}
+        contratos={contratos}
+        novoTicket={novoTicket}
+        setNovoTicket={setNovoTicket}
+        status={status}
+        exibirModalNovo={exibirModalNovo}
+        setExibirModalNovo={setExibirModalNovo}
+        handleCreateTicket={handleCreateTicket}
+        exibirModalDetalhes={exibirModalDetalhes}
+        setExibirModalDetalhes={setExibirModalDetalhes}
+        intervencaoDetalhe={intervencaoDetalhe}
+        carregandoDetalhe={carregandoDetalhe}
+        handleVerDetalhes={handleVerDetalhes}
+        novoComentario={novoComentario}
+        setNovoComentario={setNovoComentario}
+        handleEnviarComentario={handleEnviarComentario}
+        podeClienteAlterar={podeClienteAlterar}
+        exibirModalEditar={exibirModalEditar}
+        setExibirModalEditar={setExibirModalEditar}
+        formEditar={formEditar}
+        setFormEditar={setFormEditar}
+        abrirEditarCliente={abrirEditarCliente}
+        handleEditarCliente={handleEditarCliente}
+        salvandoEdicao={salvandoEdicao}
+        handleDeletarIntervencao={handleDeletarIntervencao}
+        handleUploadAnexo={handleUploadAnexo}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">

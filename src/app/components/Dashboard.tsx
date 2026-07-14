@@ -24,6 +24,7 @@ import jsPDF from 'jspdf';
 import { intervencoesService, relatoriosService, contratosService } from '../services/api';
 import { Intervencao, Contrato } from '../types/api';
 import { formatarHoras } from '../utils/formatters';
+import { ClienteDashboardView } from './cliente/ClienteDashboardView';
 import {
   BarChart,
   Bar,
@@ -369,6 +370,20 @@ export function Dashboard({ onNavigate }: { onNavigate?: (pagina: string) => voi
 
     pdf.save(`dashboard-admin-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
+
+  // Perfil Cliente: tela inicial estilo app de mensagens, reaproveitando os mesmos dados já carregados acima.
+  if (isCliente) {
+    return (
+      <ClienteDashboardView
+        usuario={usuario}
+        dadosDashboard={dadosDashboard}
+        intervencoes={intervencoes}
+        contratosExpira={contratosExpira}
+        carregando={carregando}
+        onNavigate={onNavigate}
+      />
+    );
+  }
 
   return (
     <div ref={dashboardRef} className="space-y-8 pb-8">

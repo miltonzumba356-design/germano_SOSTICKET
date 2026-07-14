@@ -4,9 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCronometro } from '../contexts/CronometroContext';
 import { perfilService } from '../services/api';
 import { Usuario } from '../types/api';
+import { ClientePerfilView } from './cliente/ClientePerfilView';
 
 export function Perfil() {
   const { usuario, logout } = useAuth();
+  const isCliente = usuario?.perfil === 'cliente';
   const { cronometros } = useCronometro();
   const [abaAtiva, setAbaAtiva] = useState<'info' | 'senha' | 'notificacoes'>('info');
   const [perfil, setPerfil] = useState<Usuario | null>(usuario);
@@ -122,6 +124,29 @@ export function Perfil() {
   };
 
   const nomePerfil = perfil?.nome || usuario?.nome || 'Utilizador';
+
+  // Perfil Cliente: layout estilo configurações do WhatsApp, reaproveitando os mesmos dados/handlers já existentes acima.
+  if (isCliente) {
+    return (
+      <ClientePerfilView
+        usuario={usuario}
+        perfil={perfil}
+        formData={formData}
+        setFormData={setFormData}
+        senha={senha}
+        setSenha={setSenha}
+        preferencias={preferencias}
+        setPreferencias={setPreferencias}
+        handleSalvarPerfil={handleSalvarPerfil}
+        handleAlterarSenha={handleAlterarSenha}
+        tentarLogout={tentarLogout}
+        carregando={carregando}
+        salvando={salvando}
+        erro={erro}
+        sucesso={sucesso}
+      />
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-12">
