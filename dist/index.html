@@ -152,8 +152,8 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/index-DXIE8nvz.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-C8WDVyGV.css">
+  <script type="module" crossorigin src="/assets/index-CiGx5WF8.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-s32LGxTi.css">
 <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
 
 <body translate="no" class="notranslate">
@@ -170,8 +170,12 @@
 
   <div id="root" translate="no" class="notranslate"></div>
   <script>
-    // Remove splash quando a app React montar
-    window.addEventListener('load', function () {
+    // Remove o splash assim que o DOM e os scripts adiados (módulo React) terminarem.
+    // Usa DOMContentLoaded em vez de 'load': 'load' só dispara depois de TODOS os
+    // recursos da página (incluindo imagens externas, como a do ecrã de login)
+    // terminarem — em rede lenta/instável (comum em PWA móvel) isso prendia o
+    // splash indefinidamente, mesmo com a app já montada por baixo.
+    function esconderSplash() {
       setTimeout(function () {
         var splash = document.getElementById('splash');
         if (splash) {
@@ -179,7 +183,13 @@
           setTimeout(function () { splash.remove(); }, 500);
         }
       }, 300);
-    });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', esconderSplash);
+    } else {
+      esconderSplash();
+    }
   </script>
 </body>
 

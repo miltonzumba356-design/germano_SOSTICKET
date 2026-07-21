@@ -5,6 +5,8 @@ import {
   Building2,
   Calculator,
   Check,
+  FileDown,
+  FileSpreadsheet,
   FileText,
   Landmark,
   Loader2,
@@ -28,6 +30,7 @@ import {
   SaldoContaItem,
   balanceteService,
 } from '../services/conciliacaoApi';
+import { exportarRelatorioExcel, exportarRelatorioPdf, LinhaExportavel } from '../utils/balanceteExport';
 
 type AbaExercicio = 'saldos' | 'balanco' | 'dr' | 'notas' | 'modelo-imposto';
 
@@ -77,6 +80,40 @@ function BotaoPrimario({
       {children}
     </button>
   );
+}
+
+function BotoesExportacao({ onExcel, onPdf }: { onExcel: () => void; onPdf: () => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onExcel}
+        className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-all"
+      >
+        <FileSpreadsheet className="w-4 h-4" />
+        Excel
+      </button>
+      <button
+        type="button"
+        onClick={onPdf}
+        className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-all"
+      >
+        <FileDown className="w-4 h-4" />
+        PDF
+      </button>
+    </div>
+  );
+}
+
+function nomeFicheiro(...partes: (string | number | undefined)[]) {
+  return partes
+    .filter(Boolean)
+    .join('-')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
 }
 
 // ────────────────────────────── Selector de Empresa ──────────────────────────────
@@ -495,30 +532,93 @@ function agruparPorSeccao(linhas: LinhaRelatorio[]) {
   return Array.from(grupos.entries());
 }
 
+function ehTotalizadora(designacao: string) {
+  return /^(total|soma)/i.test(designacao.trim());
+}
+
 function PainelRelatorio({
   titulo,
-  exercicioId,
-  moeda,
+  tipo,
+  empresa,
+  exercicio,
   carregar,
 }: {
   titulo: string;
-  exercicioId: number;
-  moeda: string;
+  tipo: 'balanco' | 'dr';
+  empresa: EmpresaBalancete;
+  exercicio: ExercicioBalancete;
   carregar: (exercicioId: number) => Promise<RelatorioBalancete>;
 }) {
   const [relatorio, setRelatorio] = useState<RelatorioBalancete | null>(null);
+  const [relatorioAnterior, setRelatorioAnterior] = useState<RelatorioBalancete | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
   useEffect(() => {
+    let cancelado = false;
     setCarregando(true);
     setErro('');
     setRelatorio(null);
-    carregar(exercicioId)
-      .then(setRelatorio)
-      .catch((e) => setErro(mensagemErro(e, `Não foi possível carregar ${titulo.toLowerCase()}.`)))
-      .finally(() => setCarregando(false));
-  }, [exercicioId]);
+    setRelatorioAnterior(null);
+
+    (async () => {
+      try {
+        const actual = await carregar(exercicio.id);
+        if (cancelado) return;
+        setRelatorio(actual);
+
+        try {
+          const exerciciosEmpresa = await balanceteService.exercicios.listar(empresa.id);
+          const anterior = exerciciosEmpresa.find((item) => item.ano === exercicio.ano - 1);
+          if (anterior && !cancelado) {
+            const relatorioAnteriorResposta = await carregar(anterior.id);
+            if (!cancelado) setRelatorioAnterior(relatorioAnteriorResposta);
+          }
+        } catch {
+          // Comparação com o exercício anterior é apenas complementar — falhas aqui não bloqueiam o relatório actual.
+        }
+      } catch (e) {
+        if (!cancelado) setErro(mensagemErro(e, `Não foi possível carregar ${titulo.toLowerCase()}.`));
+      } finally {
+        if (!cancelado) setCarregando(false);
+      }
+    })();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [exercicio.id, exercicio.ano, empresa.id]);
+
+  const exportar = (formato: 'excel' | 'pdf') => {
+    if (!relatorio) return;
+    const temAnterior = !!relatorioAnterior;
+    const valoresAnteriores = new Map((relatorioAnterior?.linhas || []).map((l) => [l.codigo_linha, l.valor]));
+
+    const colunas = ['Designação', 'Notas', `Exercício ${exercicio.ano}`, ...(temAnterior ? [`Exercício ${exercicio.ano - 1}`] : [])];
+    const linhas: LinhaExportavel[] = relatorio.linhas.map((linha) => ({
+      celulas: [
+        linha.designacao,
+        linha.nota_ref ?? '',
+        linha.valor,
+        ...(temAnterior ? [valoresAnteriores.get(linha.codigo_linha) ?? 0] : []),
+      ],
+      destaque: ehTotalizadora(linha.designacao),
+    }));
+
+    const dados = {
+      ficheiro: nomeFicheiro(tipo, empresa.nome, exercicio.ano),
+      titulo,
+      empresaNome: empresa.nome,
+      nif: empresa.nif,
+      ano: exercicio.ano,
+      moeda: empresa.moeda,
+      colunas,
+      linhas,
+    };
+
+    if (formato === 'excel') exportarRelatorioExcel(dados);
+    else exportarRelatorioPdf(dados);
+  };
 
   if (carregando) {
     return (
@@ -533,9 +633,21 @@ function PainelRelatorio({
 
   const grupos = agruparPorSeccao(relatorio.linhas);
   const bateVerificacao = relatorio.verificacao == null || Math.abs(relatorio.verificacao) < 0.01;
+  const valoresAnteriores = new Map((relatorioAnterior?.linhas || []).map((l) => [l.codigo_linha, l.valor]));
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4">
+        <div>
+          <p className="text-lg font-black text-gray-900 uppercase tracking-tight">{titulo}</p>
+          <p className="text-xs text-gray-500">
+            {empresa.nome}
+            {empresa.nif && ` · NIF ${empresa.nif}`} · Exercício {exercicio.ano} · Valores expressos em {empresa.moeda}
+          </p>
+        </div>
+        <BotoesExportacao onExcel={() => exportar('excel')} onPdf={() => exportar('pdf')} />
+      </div>
+
       {relatorio.verificacao != null && (
         <div
           className={`flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wide ${
@@ -543,22 +655,26 @@ function PainelRelatorio({
           }`}
         >
           <span>Verificação (deve ser 0)</span>
-          <span>{formatarValor(relatorio.verificacao, moeda)}</span>
+          <span>{formatarValor(relatorio.verificacao, empresa.moeda)}</span>
         </div>
       )}
 
       {grupos.map(([seccao, linhas]) => (
         <Cartao key={seccao} className="p-0 overflow-hidden">
-          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
             <p className="text-xs font-black text-gray-500 uppercase tracking-wide">{humanizarSeccao(seccao)}</p>
+            <div className="hidden md:flex items-center gap-8 text-[10px] font-black text-gray-400 uppercase tracking-wide">
+              <span className="w-28 text-right">Exercício {exercicio.ano}</span>
+              {relatorioAnterior && <span className="w-28 text-right">Exercício {exercicio.ano - 1}</span>}
+            </div>
           </div>
           <div className="divide-y divide-gray-50">
             {linhas.map((linha) => {
-              const totalizadora = /^total/i.test(linha.designacao);
+              const totalizadora = ehTotalizadora(linha.designacao);
               return (
                 <div
                   key={linha.codigo_linha}
-                  className={`flex items-center justify-between px-5 py-3 text-sm ${totalizadora ? 'bg-gray-50/60' : ''}`}
+                  className={`flex items-center justify-between px-5 py-3 text-sm gap-4 ${totalizadora ? 'bg-gray-50/60' : ''}`}
                 >
                   <p className={totalizadora ? 'font-black text-gray-900' : 'text-gray-700'}>
                     {linha.designacao}
@@ -566,9 +682,16 @@ function PainelRelatorio({
                       <span className="ml-2 text-[10px] font-bold text-theme-primary align-super">Nota {linha.nota_ref}</span>
                     )}
                   </p>
-                  <p className={totalizadora ? 'font-black text-gray-900' : 'font-bold text-gray-700'}>
-                    {formatarValor(linha.valor, moeda)}
-                  </p>
+                  <div className="flex items-center gap-8 flex-shrink-0">
+                    <p className={`w-28 text-right ${totalizadora ? 'font-black text-gray-900' : 'font-bold text-gray-700'}`}>
+                      {formatarValor(linha.valor, empresa.moeda)}
+                    </p>
+                    {relatorioAnterior && (
+                      <p className={`w-28 text-right ${totalizadora ? 'font-black text-gray-500' : 'text-gray-400'}`}>
+                        {formatarValor(valoresAnteriores.get(linha.codigo_linha) ?? 0, empresa.moeda)}
+                      </p>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -583,7 +706,45 @@ function PainelRelatorio({
 
 // ─────────────────────────────────── Notas ───────────────────────────────────
 
-function PainelNotas({ exercicioId }: { exercicioId: number }) {
+interface LinhaNotaNormalizada {
+  rubrica: string;
+  valor: string;
+}
+
+function normalizarNotaParaTabela(dados: unknown): LinhaNotaNormalizada[] | null {
+  const extrairLinhas = (itens: unknown): LinhaNotaNormalizada[] | null => {
+    if (!Array.isArray(itens) || !itens.length) return null;
+    const linhas = itens
+      .map((item: any) => {
+        if (item == null) return null;
+        if (typeof item !== 'object') return { rubrica: '', valor: String(item) };
+        const rubrica = item.rubrica || item.label || item.designacao || item.nome || item.titulo || '';
+        const valorBruto = item.valor ?? item.valores ?? item.total ?? item.montante;
+        if (!rubrica && valorBruto == null) return null;
+        const valor = Array.isArray(valorBruto) ? valorBruto.join(' / ') : String(valorBruto ?? '-');
+        return { rubrica: String(rubrica || '-'), valor };
+      })
+      .filter((item): item is LinhaNotaNormalizada => item !== null);
+    return linhas.length ? linhas : null;
+  };
+
+  if (Array.isArray(dados)) return extrairLinhas(dados);
+  if (dados && typeof dados === 'object') {
+    const objecto = dados as Record<string, unknown>;
+    if (Array.isArray(objecto.linhas)) return extrairLinhas(objecto.linhas);
+    if (Array.isArray(objecto.valores)) return extrairLinhas(objecto.valores);
+    if (Array.isArray(objecto.seccoes)) {
+      const linhas = (objecto.seccoes as any[]).flatMap((seccao) => {
+        const linhasSeccao = extrairLinhas(seccao?.linhas) || [];
+        return linhasSeccao.map((linha) => ({ rubrica: seccao?.titulo ? `${seccao.titulo} · ${linha.rubrica}` : linha.rubrica, valor: linha.valor }));
+      });
+      return linhas.length ? linhas : null;
+    }
+  }
+  return null;
+}
+
+function PainelNotas({ empresa, exercicio }: { empresa: EmpresaBalancete; exercicio: ExercicioBalancete }) {
   const [templates, setTemplates] = useState<NotaTemplateResumo[]>([]);
   const [carregandoTemplates, setCarregandoTemplates] = useState(true);
   const [erroTemplates, setErroTemplates] = useState('');
@@ -625,7 +786,7 @@ function PainelNotas({ exercicioId }: { exercicioId: number }) {
 
       <div className="md:col-span-3">
         {notaSelecionada ? (
-          <DetalheNota exercicioId={exercicioId} template={notaSelecionada} />
+          <DetalheNota empresa={empresa} exercicio={exercicio} template={notaSelecionada} />
         ) : (
           <p className="text-sm text-gray-500 text-center py-12">Selecione uma nota às contas para consultar/editar.</p>
         )}
@@ -634,7 +795,16 @@ function PainelNotas({ exercicioId }: { exercicioId: number }) {
   );
 }
 
-function DetalheNota({ exercicioId, template }: { exercicioId: number; template: NotaTemplateResumo }) {
+function DetalheNota({
+  empresa,
+  exercicio,
+  template,
+}: {
+  empresa: EmpresaBalancete;
+  exercicio: ExercicioBalancete;
+  template: NotaTemplateResumo;
+}) {
+  const exercicioId = exercicio.id;
   const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -715,15 +885,58 @@ function DetalheNota({ exercicioId, template }: { exercicioId: number; template:
     );
   }
 
+  const linhasTabela = normalizarNotaParaTabela(dados);
+
+  const exportar = (formato: 'excel' | 'pdf') => {
+    const linhasExport: LinhaExportavel[] = (linhasTabela || []).map((linha) => ({ celulas: [linha.rubrica, linha.valor] }));
+    const dadosExport = {
+      ficheiro: nomeFicheiro('nota', template.numero, template.titulo, empresa.nome, exercicio.ano),
+      titulo: `Nota ${template.numero} · ${template.titulo}`,
+      empresaNome: empresa.nome,
+      nif: empresa.nif,
+      ano: exercicio.ano,
+      moeda: empresa.moeda,
+      colunas: ['Rubrica', 'Valor'],
+      linhas: linhasExport,
+    };
+    if (formato === 'excel') exportarRelatorioExcel(dadosExport);
+    else exportarRelatorioPdf(dadosExport);
+  };
+
   return (
     <div className="space-y-6">
       {erro && <AlertaErro mensagem={erro} />}
 
-      <Cartao className="space-y-2">
-        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Nota {template.numero} · {template.titulo}</p>
-        <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl p-4 overflow-auto max-h-72 whitespace-pre-wrap">
-          {JSON.stringify(dados, null, 2)}
-        </pre>
+      <Cartao className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Nota {template.numero} · {template.titulo}</p>
+          {linhasTabela && <BotoesExportacao onExcel={() => exportar('excel')} onPdf={() => exportar('pdf')} />}
+        </div>
+
+        {linhasTabela ? (
+          <div className="overflow-x-auto border border-gray-100 rounded-xl">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-3 text-left">Rubrica</th>
+                  <th className="px-4 py-3 text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {linhasTabela.map((linha, index) => (
+                  <tr key={index}>
+                    <td className="px-4 py-2.5 text-gray-700">{linha.rubrica}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-gray-900">{linha.valor}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl p-4 overflow-auto max-h-72 whitespace-pre-wrap">
+            {JSON.stringify(dados, null, 2)}
+          </pre>
+        )}
       </Cartao>
 
       <Cartao className="space-y-4">
@@ -804,7 +1017,9 @@ function DetalheNota({ exercicioId, template }: { exercicioId: number; template:
 
 // ───────────────────────────── Modelo de Imposto ─────────────────────────────
 
-function PainelModeloImposto({ exercicioId, moeda }: { exercicioId: number; moeda: string }) {
+function PainelModeloImposto({ empresa, exercicio }: { empresa: EmpresaBalancete; exercicio: ExercicioBalancete }) {
+  const exercicioId = exercicio.id;
+  const moeda = empresa.moeda;
   const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -883,15 +1098,71 @@ function PainelModeloImposto({ exercicioId, moeda }: { exercicioId: number; moed
     }
   };
 
+  const linhasModelo = normalizarNotaParaTabela(dados);
+
+  const exportar = (formato: 'excel' | 'pdf') => {
+    const linhas: LinhaExportavel[] = [];
+    if (linhasModelo?.length) {
+      linhas.push(...linhasModelo.map((linha) => ({ celulas: [linha.rubrica, linha.valor] })));
+    }
+    if (ajustesCriados.length) {
+      linhas.push({ celulas: ['APURAMENTO DO LUCRO TRIBUTÁVEL — AJUSTES', ''], destaque: true });
+      ajustesCriados.forEach((ajuste) => {
+        linhas.push({ celulas: [`${ajuste.tipo.replace(/_/g, ' ')} · ${ajuste.designacao}${ajuste.artigo ? ` (${ajuste.artigo})` : ''}`, formatarValor(ajuste.valor, moeda)] });
+      });
+    }
+    if (prejuizos.length) {
+      linhas.push({ celulas: ['PREJUÍZOS FISCAIS REPORTÁVEIS (ART. 46º CII)', ''], destaque: true });
+      prejuizos.forEach((prejuizo) => {
+        linhas.push({ celulas: [`Exercício ${prejuizo.ano_origem}`, formatarValor(prejuizo.valor, moeda)] });
+      });
+    }
+
+    const dadosExport = {
+      ficheiro: nomeFicheiro('modelo-imposto', empresa.nome, exercicio.ano),
+      titulo: 'Modelo 1 · Imposto Industrial',
+      empresaNome: empresa.nome,
+      nif: empresa.nif,
+      ano: exercicio.ano,
+      moeda,
+      colunas: ['Rubrica', 'Valor'],
+      linhas,
+    };
+    if (formato === 'excel') exportarRelatorioExcel(dadosExport);
+    else exportarRelatorioPdf(dadosExport);
+  };
+
   return (
     <div className="space-y-6">
       {erro && <AlertaErro mensagem={erro} />}
 
-      <Cartao className="space-y-2">
-        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Modelo 1 · Imposto Industrial</p>
+      <Cartao className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Modelo 1 · Imposto Industrial</p>
+          {!carregando && <BotoesExportacao onExcel={() => exportar('excel')} onPdf={() => exportar('pdf')} />}
+        </div>
         {carregando ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-5 h-5 animate-spin text-theme-primary" />
+          </div>
+        ) : linhasModelo ? (
+          <div className="overflow-x-auto border border-gray-100 rounded-xl">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-3 text-left">Rubrica</th>
+                  <th className="px-4 py-3 text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {linhasModelo.map((linha, index) => (
+                  <tr key={index}>
+                    <td className="px-4 py-2.5 text-gray-700">{linha.rubrica}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-gray-900">{linha.valor}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl p-4 overflow-auto max-h-72 whitespace-pre-wrap">
@@ -1078,18 +1349,19 @@ function PainelExercicio({
 
       {aba === 'saldos' && <PainelSaldos exercicioId={exercicio.id} moeda={empresa.moeda} />}
       {aba === 'balanco' && (
-        <PainelRelatorio titulo="o Balanço" exercicioId={exercicio.id} moeda={empresa.moeda} carregar={balanceteService.balanco} />
+        <PainelRelatorio titulo="Balanço" tipo="balanco" empresa={empresa} exercicio={exercicio} carregar={balanceteService.balanco} />
       )}
       {aba === 'dr' && (
         <PainelRelatorio
-          titulo="a Demonstração de Resultados"
-          exercicioId={exercicio.id}
-          moeda={empresa.moeda}
+          titulo="Demonstração de Resultados"
+          tipo="dr"
+          empresa={empresa}
+          exercicio={exercicio}
           carregar={balanceteService.demonstracaoResultados}
         />
       )}
-      {aba === 'notas' && <PainelNotas exercicioId={exercicio.id} />}
-      {aba === 'modelo-imposto' && <PainelModeloImposto exercicioId={exercicio.id} moeda={empresa.moeda} />}
+      {aba === 'notas' && <PainelNotas empresa={empresa} exercicio={exercicio} />}
+      {aba === 'modelo-imposto' && <PainelModeloImposto empresa={empresa} exercicio={exercicio} />}
     </div>
   );
 }
