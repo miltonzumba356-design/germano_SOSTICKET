@@ -16,6 +16,7 @@ import { Calendario } from './components/Calendario';
 import { Register } from './components/Register';
 import { Capturas } from './components/Capturas';
 import { Conciliacao } from './components/Conciliacao';
+import { Balancete } from './components/Balancete';
 
 // Componente principal da aplicação que gerencia as rotas
 function AppContent() {
@@ -104,6 +105,11 @@ function AppContent() {
     // Conciliação handles (apenas admin)
     if (paginaAtual === 'conciliacao' || paginaAtual.startsWith('conciliacao_')) {
       return <Conciliacao />;
+    }
+
+    // Balancete handles (apenas admin)
+    if (paginaAtual === 'balancete' || paginaAtual.startsWith('balancete_')) {
+      return <Balancete />;
     }
 
     return <Dashboard />;

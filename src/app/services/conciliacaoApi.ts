@@ -138,6 +138,81 @@ export interface HealthResponse {
   ocr_disponivel: Record<string, unknown>;
 }
 
+// ── Balancete (empresas, exercícios, saldos, relatórios contabilísticos) ──
+
+export interface EmpresaBalancete {
+  id: number;
+  nome: string;
+  nif?: string | null;
+  moeda: string;
+}
+
+export interface ExercicioBalancete {
+  id: number;
+  empresa_id: number;
+  ano: number;
+  mes_inicial: number;
+  mes_final: number;
+}
+
+export interface SaldoConta {
+  id: number;
+  codigo_conta: string;
+  saldo: number;
+  nao_corrente: boolean;
+}
+
+export interface SaldoContaItem {
+  codigo_conta: string;
+  saldo: number;
+  nao_corrente?: boolean;
+}
+
+export interface LinhaRelatorio {
+  codigo_linha: string;
+  seccao: string;
+  designacao: string;
+  nota_ref?: number | null;
+  valor: number;
+}
+
+export interface RelatorioBalancete {
+  relatorio: string;
+  exercicio_id: number;
+  ano: number;
+  linhas: LinhaRelatorio[];
+  verificacao?: number | null;
+}
+
+export interface NotaTemplateResumo {
+  numero: number;
+  titulo: string;
+}
+
+export interface NotaValorItem {
+  seccao_linha_id: number;
+  valores: number[];
+}
+
+export interface NotaObservacaoResponse {
+  nota_numero: number;
+  texto: string;
+}
+
+export interface AjusteFiscal {
+  id: number;
+  tipo: string;
+  designacao: string;
+  valor: number;
+  artigo?: string | null;
+}
+
+export interface PrejuizoFiscal {
+  id: number;
+  ano_origem: number;
+  valor: number;
+}
+
 async function parseResponse(response: Response) {
   if (response.status === 204) return undefined;
 
@@ -218,5 +293,69 @@ export const conciliacaoService = {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
     });
+  },
+};
+
+const jsonBody = (dados: unknown) => ({
+  method: 'POST' as const,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(dados),
+});
+
+export const balanceteService = {
+  empresas: {
+    listar: () => request<EmpresaBalancete[]>('/empresas'),
+    obterPorId: (id: number) => request<EmpresaBalancete>(`/empresas/${id}`),
+    criar: (dados: { nome: string; nif?: string; moeda?: string }) =>
+      request<EmpresaBalancete>('/empresas', jsonBody(dados)),
+  },
+
+  exercicios: {
+    listar: (empresaId: number) => request<ExercicioBalancete[]>(`/empresas/${empresaId}/exercicios`),
+    criar: (empresaId: number, dados: { ano: number; mes_inicial?: number; mes_final?: number }) =>
+      request<ExercicioBalancete>(`/empresas/${empresaId}/exercicios`, jsonBody(dados)),
+  },
+
+  saldos: {
+    listar: (exercicioId: number) => request<SaldoConta[]>(`/exercicios/${exercicioId}/saldos`),
+    actualizar: (exercicioId: number, saldos: SaldoContaItem[]) =>
+      request<SaldoConta[]>(`/exercicios/${exercicioId}/saldos`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ saldos }),
+      }),
+  },
+
+  balanco: (exercicioId: number) => request<RelatorioBalancete>(`/exercicios/${exercicioId}/balanco`),
+
+  demonstracaoResultados: (exercicioId: number) =>
+    request<RelatorioBalancete>(`/exercicios/${exercicioId}/demonstracao-resultados`),
+
+  notas: {
+    listarTemplates: () => request<NotaTemplateResumo[]>('/notas'),
+    obter: (exercicioId: number, numero: number) =>
+      request<unknown>(`/exercicios/${exercicioId}/notas/${numero}`),
+    actualizar: (exercicioId: number, numero: number, valores: NotaValorItem[]) =>
+      request<unknown>(`/exercicios/${exercicioId}/notas/${numero}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valores }),
+      }),
+    actualizarObservacoes: (exercicioId: number, numero: number, texto: string) =>
+      request<NotaObservacaoResponse>(`/exercicios/${exercicioId}/notas/${numero}/observacoes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto }),
+      }),
+  },
+
+  modeloImposto: {
+    obter: (exercicioId: number) => request<unknown>(`/exercicios/${exercicioId}/modelo-imposto`),
+    criarAjuste: (exercicioId: number, dados: { tipo: string; designacao: string; valor: number; artigo?: string }) =>
+      request<AjusteFiscal>(`/exercicios/${exercicioId}/modelo-imposto/ajustes`, jsonBody(dados)),
+    criarPrejuizo: (exercicioId: number, dados: { ano_origem: number; valor: number }) =>
+      request<PrejuizoFiscal>(`/exercicios/${exercicioId}/modelo-imposto/prejuizos-fiscais`, jsonBody(dados)),
+    listarPrejuizos: (exercicioId: number) =>
+      request<PrejuizoFiscal[]>(`/exercicios/${exercicioId}/modelo-imposto/prejuizos-fiscais`),
   },
 };

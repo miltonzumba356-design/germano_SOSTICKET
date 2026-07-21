@@ -10,6 +10,7 @@ import {
   Building2,
   Monitor,
   Landmark,
+  Calculator,
   LucideIcon
 } from 'lucide-react';
 
@@ -65,6 +66,11 @@ export const adminMenu: MenuItem[] = [
     id: 'conciliacao',
     label: 'Conciliação',
     icon: Landmark,
+  },
+  {
+    id: 'balancete',
+    label: 'Balancete',
+    icon: Calculator,
   },
   {
     id: 'configuracoes',
