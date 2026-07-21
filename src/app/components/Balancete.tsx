@@ -30,7 +30,7 @@ import {
   SaldoContaItem,
   balanceteService,
 } from '../services/conciliacaoApi';
-import { exportarRelatorioExcel, exportarRelatorioPdf, LinhaExportavel } from '../utils/balanceteExport';
+import { exportarExercicioExcel, exportarExercicioPdf, TabelaExportavel } from '../utils/balanceteExport';
 
 type AbaExercicio = 'saldos' | 'balanco' | 'dr' | 'notas' | 'modelo-imposto';
 
@@ -79,29 +79,6 @@ function BotaoPrimario({
       <Icon className="w-4 h-4" />
       {children}
     </button>
-  );
-}
-
-function BotoesExportacao({ onExcel, onPdf }: { onExcel: () => void; onPdf: () => void }) {
-  return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={onExcel}
-        className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-all"
-      >
-        <FileSpreadsheet className="w-4 h-4" />
-        Excel
-      </button>
-      <button
-        type="button"
-        onClick={onPdf}
-        className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-all"
-      >
-        <FileDown className="w-4 h-4" />
-        PDF
-      </button>
-    </div>
   );
 }
 
@@ -258,6 +235,8 @@ function SelectorExercicios({
   const [mesInicial, setMesInicial] = useState(1);
   const [mesFinal, setMesFinal] = useState(12);
   const [aGuardar, setAGuardar] = useState(false);
+  const [aExportar, setAExportar] = useState<{ id: number; formato: 'excel' | 'pdf' } | null>(null);
+  const [erroExportacao, setErroExportacao] = useState('');
 
   useEffect(() => {
     setCarregando(true);
@@ -284,6 +263,128 @@ function SelectorExercicios({
       setErro(mensagemErro(e, 'Não foi possível criar o exercício.'));
     } finally {
       setAGuardar(false);
+    }
+  };
+
+  const montarExportacaoExercicio = async (exercicio: ExercicioBalancete) => {
+    const tabelas: TabelaExportavel[] = [];
+    let algumaFonteOk = false;
+
+    try {
+      const saldos = await balanceteService.saldos.listar(exercicio.id);
+      algumaFonteOk = true;
+      if (saldos.length) {
+        tabelas.push({
+          titulo: 'Saldos',
+          colunas: ['Código da Conta', 'Saldo', 'Não Corrente'],
+          linhas: saldos.map((s) => ({ celulas: [s.codigo_conta, s.saldo, s.nao_corrente ? 'Sim' : 'Não'] })),
+        });
+      }
+    } catch {
+      // Secção omitida — sem dados disponíveis nesta fonte.
+    }
+
+    const mapaRelatorio = (titulo: string, relatorio: RelatorioBalancete): TabelaExportavel => ({
+      titulo,
+      colunas: ['Designação', 'Notas', 'Valor'],
+      linhas: relatorio.linhas.map((linha) => ({
+        celulas: [linha.designacao, linha.nota_ref ?? '', linha.valor],
+        destaque: ehTotalizadora(linha.designacao),
+      })),
+    });
+
+    try {
+      const balanco = await balanceteService.balanco(exercicio.id);
+      algumaFonteOk = true;
+      if (balanco.linhas.length) tabelas.push(mapaRelatorio('Balanço', balanco));
+    } catch {
+      // Secção omitida — sem dados disponíveis nesta fonte.
+    }
+
+    try {
+      const dr = await balanceteService.demonstracaoResultados(exercicio.id);
+      algumaFonteOk = true;
+      if (dr.linhas.length) tabelas.push(mapaRelatorio('Demonstração de Resultados', dr));
+    } catch {
+      // Secção omitida — sem dados disponíveis nesta fonte.
+    }
+
+    try {
+      const templates = await balanceteService.notas.listarTemplates();
+      algumaFonteOk = true;
+      for (const template of templates) {
+        try {
+          const detalhe = await balanceteService.notas.obter(exercicio.id, template.numero);
+          const linhasNota = normalizarNotaParaTabela(detalhe);
+          if (linhasNota?.length) {
+            tabelas.push({
+              titulo: `Nota ${template.numero} · ${template.titulo}`,
+              colunas: ['Rubrica', 'Valor'],
+              linhas: linhasNota.map((linha) => ({ celulas: [linha.rubrica, linha.valor] })),
+            });
+          }
+        } catch {
+          // Nota sem dados disponíveis — omitida do export.
+        }
+      }
+    } catch {
+      // Secção omitida — sem dados disponíveis nesta fonte.
+    }
+
+    try {
+      const modeloImposto = await balanceteService.modeloImposto.obter(exercicio.id);
+      algumaFonteOk = true;
+      const linhasModelo = normalizarNotaParaTabela(modeloImposto);
+      if (linhasModelo?.length) {
+        tabelas.push({
+          titulo: 'Modelo 1 · Imposto Industrial',
+          colunas: ['Rubrica', 'Valor'],
+          linhas: linhasModelo.map((linha) => ({ celulas: [linha.rubrica, linha.valor] })),
+        });
+      }
+    } catch {
+      // Secção omitida — sem dados disponíveis nesta fonte.
+    }
+
+    try {
+      const prejuizos = await balanceteService.modeloImposto.listarPrejuizos(exercicio.id);
+      algumaFonteOk = true;
+      if (prejuizos.length) {
+        tabelas.push({
+          titulo: 'Modelo 1 · Prejuízos Fiscais',
+          colunas: ['Exercício de Origem', 'Valor'],
+          linhas: prejuizos.map((p) => ({ celulas: [p.ano_origem, p.valor] })),
+        });
+      }
+    } catch {
+      // Secção omitida — sem dados disponíveis nesta fonte.
+    }
+
+    if (!algumaFonteOk) {
+      throw new Error('Não foi possível obter dados deste exercício para exportar.');
+    }
+
+    return {
+      ficheiro: nomeFicheiro('balancete', empresa.nome, exercicio.ano),
+      empresaNome: empresa.nome,
+      nif: empresa.nif,
+      ano: exercicio.ano,
+      moeda: empresa.moeda,
+      tabelas,
+    };
+  };
+
+  const exportarExercicio = async (exercicio: ExercicioBalancete, formato: 'excel' | 'pdf') => {
+    setAExportar({ id: exercicio.id, formato });
+    setErroExportacao('');
+    try {
+      const dados = await montarExportacaoExercicio(exercicio);
+      if (formato === 'excel') await exportarExercicioExcel(dados);
+      else exportarExercicioPdf(dados);
+    } catch (e) {
+      setErroExportacao(mensagemErro(e, 'Não foi possível exportar este exercício.'));
+    } finally {
+      setAExportar(null);
     }
   };
 
@@ -345,6 +446,7 @@ function SelectorExercicios({
       )}
 
       {!aCriar && erro && <AlertaErro mensagem={erro} />}
+      {erroExportacao && <AlertaErro mensagem={erroExportacao} />}
 
       {carregando ? (
         <div className="flex items-center justify-center py-12">
@@ -354,19 +456,45 @@ function SelectorExercicios({
         <p className="text-sm text-gray-500 text-center py-12">Esta empresa ainda não tem exercícios registados.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {exercicios.map((exercicio) => (
-            <button
-              key={exercicio.id}
-              onClick={() => onSelecionar(exercicio)}
-              className="text-left bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:border-theme-primary hover:shadow-md transition-all"
-            >
-              <div className="w-10 h-10 rounded-xl bg-theme-primary-light flex items-center justify-center mb-3">
-                <Calculator className="w-5 h-5 text-theme-primary" />
+          {exercicios.map((exercicio) => {
+            const aExportarExcel = aExportar?.id === exercicio.id && aExportar.formato === 'excel';
+            const aExportarPdf = aExportar?.id === exercicio.id && aExportar.formato === 'pdf';
+            return (
+              <div
+                key={exercicio.id}
+                className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:border-theme-primary hover:shadow-md transition-all space-y-3"
+              >
+                <button type="button" onClick={() => onSelecionar(exercicio)} className="w-full text-left">
+                  <div className="w-10 h-10 rounded-xl bg-theme-primary-light flex items-center justify-center mb-3">
+                    <Calculator className="w-5 h-5 text-theme-primary" />
+                  </div>
+                  <p className="font-bold text-gray-900">{exercicio.ano}</p>
+                  <p className="text-xs text-gray-500">Mês {exercicio.mes_inicial} a {exercicio.mes_final}</p>
+                </button>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-gray-50">
+                  <button
+                    type="button"
+                    onClick={() => exportarExercicio(exercicio, 'excel')}
+                    disabled={!!aExportar}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-all disabled:opacity-60"
+                  >
+                    {aExportarExcel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+                    Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exportarExercicio(exercicio, 'pdf')}
+                    disabled={!!aExportar}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-all disabled:opacity-60"
+                  >
+                    {aExportarPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                    PDF
+                  </button>
+                </div>
               </div>
-              <p className="font-bold text-gray-900">{exercicio.ano}</p>
-              <p className="text-xs text-gray-500">Mês {exercicio.mes_inicial} a {exercicio.mes_final}</p>
-            </button>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -538,13 +666,11 @@ function ehTotalizadora(designacao: string) {
 
 function PainelRelatorio({
   titulo,
-  tipo,
   empresa,
   exercicio,
   carregar,
 }: {
   titulo: string;
-  tipo: 'balanco' | 'dr';
   empresa: EmpresaBalancete;
   exercicio: ExercicioBalancete;
   carregar: (exercicioId: number) => Promise<RelatorioBalancete>;
@@ -589,37 +715,6 @@ function PainelRelatorio({
     };
   }, [exercicio.id, exercicio.ano, empresa.id]);
 
-  const exportar = (formato: 'excel' | 'pdf') => {
-    if (!relatorio) return;
-    const temAnterior = !!relatorioAnterior;
-    const valoresAnteriores = new Map((relatorioAnterior?.linhas || []).map((l) => [l.codigo_linha, l.valor]));
-
-    const colunas = ['Designação', 'Notas', `Exercício ${exercicio.ano}`, ...(temAnterior ? [`Exercício ${exercicio.ano - 1}`] : [])];
-    const linhas: LinhaExportavel[] = relatorio.linhas.map((linha) => ({
-      celulas: [
-        linha.designacao,
-        linha.nota_ref ?? '',
-        linha.valor,
-        ...(temAnterior ? [valoresAnteriores.get(linha.codigo_linha) ?? 0] : []),
-      ],
-      destaque: ehTotalizadora(linha.designacao),
-    }));
-
-    const dados = {
-      ficheiro: nomeFicheiro(tipo, empresa.nome, exercicio.ano),
-      titulo,
-      empresaNome: empresa.nome,
-      nif: empresa.nif,
-      ano: exercicio.ano,
-      moeda: empresa.moeda,
-      colunas,
-      linhas,
-    };
-
-    if (formato === 'excel') exportarRelatorioExcel(dados);
-    else exportarRelatorioPdf(dados);
-  };
-
   if (carregando) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -637,15 +732,12 @@ function PainelRelatorio({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4">
-        <div>
-          <p className="text-lg font-black text-gray-900 uppercase tracking-tight">{titulo}</p>
-          <p className="text-xs text-gray-500">
-            {empresa.nome}
-            {empresa.nif && ` · NIF ${empresa.nif}`} · Exercício {exercicio.ano} · Valores expressos em {empresa.moeda}
-          </p>
-        </div>
-        <BotoesExportacao onExcel={() => exportar('excel')} onPdf={() => exportar('pdf')} />
+      <div className="border-b border-gray-100 pb-4">
+        <p className="text-lg font-black text-gray-900 uppercase tracking-tight">{titulo}</p>
+        <p className="text-xs text-gray-500">
+          {empresa.nome}
+          {empresa.nif && ` · NIF ${empresa.nif}`} · Exercício {exercicio.ano} · Valores expressos em {empresa.moeda}
+        </p>
       </div>
 
       {relatorio.verificacao != null && (
@@ -886,32 +978,14 @@ function DetalheNota({
   }
 
   const linhasTabela = normalizarNotaParaTabela(dados);
-
-  const exportar = (formato: 'excel' | 'pdf') => {
-    const linhasExport: LinhaExportavel[] = (linhasTabela || []).map((linha) => ({ celulas: [linha.rubrica, linha.valor] }));
-    const dadosExport = {
-      ficheiro: nomeFicheiro('nota', template.numero, template.titulo, empresa.nome, exercicio.ano),
-      titulo: `Nota ${template.numero} · ${template.titulo}`,
-      empresaNome: empresa.nome,
-      nif: empresa.nif,
-      ano: exercicio.ano,
-      moeda: empresa.moeda,
-      colunas: ['Rubrica', 'Valor'],
-      linhas: linhasExport,
-    };
-    if (formato === 'excel') exportarRelatorioExcel(dadosExport);
-    else exportarRelatorioPdf(dadosExport);
-  };
+  const semDados = dados == null || (typeof dados === 'object' && Object.keys(dados as object).length === 0);
 
   return (
     <div className="space-y-6">
       {erro && <AlertaErro mensagem={erro} />}
 
       <Cartao className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Nota {template.numero} · {template.titulo}</p>
-          {linhasTabela && <BotoesExportacao onExcel={() => exportar('excel')} onPdf={() => exportar('pdf')} />}
-        </div>
+        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Nota {template.numero} · {template.titulo}</p>
 
         {linhasTabela ? (
           <div className="overflow-x-auto border border-gray-100 rounded-xl">
@@ -932,6 +1006,8 @@ function DetalheNota({
               </tbody>
             </table>
           </div>
+        ) : semDados ? (
+          <p className="text-sm text-gray-500 text-center py-8">Sem dados disponíveis para esta nota.</p>
         ) : (
           <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl p-4 overflow-auto max-h-72 whitespace-pre-wrap">
             {JSON.stringify(dados, null, 2)}
@@ -1099,48 +1175,14 @@ function PainelModeloImposto({ empresa, exercicio }: { empresa: EmpresaBalancete
   };
 
   const linhasModelo = normalizarNotaParaTabela(dados);
-
-  const exportar = (formato: 'excel' | 'pdf') => {
-    const linhas: LinhaExportavel[] = [];
-    if (linhasModelo?.length) {
-      linhas.push(...linhasModelo.map((linha) => ({ celulas: [linha.rubrica, linha.valor] })));
-    }
-    if (ajustesCriados.length) {
-      linhas.push({ celulas: ['APURAMENTO DO LUCRO TRIBUTÁVEL — AJUSTES', ''], destaque: true });
-      ajustesCriados.forEach((ajuste) => {
-        linhas.push({ celulas: [`${ajuste.tipo.replace(/_/g, ' ')} · ${ajuste.designacao}${ajuste.artigo ? ` (${ajuste.artigo})` : ''}`, formatarValor(ajuste.valor, moeda)] });
-      });
-    }
-    if (prejuizos.length) {
-      linhas.push({ celulas: ['PREJUÍZOS FISCAIS REPORTÁVEIS (ART. 46º CII)', ''], destaque: true });
-      prejuizos.forEach((prejuizo) => {
-        linhas.push({ celulas: [`Exercício ${prejuizo.ano_origem}`, formatarValor(prejuizo.valor, moeda)] });
-      });
-    }
-
-    const dadosExport = {
-      ficheiro: nomeFicheiro('modelo-imposto', empresa.nome, exercicio.ano),
-      titulo: 'Modelo 1 · Imposto Industrial',
-      empresaNome: empresa.nome,
-      nif: empresa.nif,
-      ano: exercicio.ano,
-      moeda,
-      colunas: ['Rubrica', 'Valor'],
-      linhas,
-    };
-    if (formato === 'excel') exportarRelatorioExcel(dadosExport);
-    else exportarRelatorioPdf(dadosExport);
-  };
+  const semDadosModelo = dados == null || (typeof dados === 'object' && Object.keys(dados as object).length === 0);
 
   return (
     <div className="space-y-6">
       {erro && <AlertaErro mensagem={erro} />}
 
       <Cartao className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Modelo 1 · Imposto Industrial</p>
-          {!carregando && <BotoesExportacao onExcel={() => exportar('excel')} onPdf={() => exportar('pdf')} />}
-        </div>
+        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Modelo 1 · Imposto Industrial</p>
         {carregando ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-5 h-5 animate-spin text-theme-primary" />
@@ -1164,6 +1206,8 @@ function PainelModeloImposto({ empresa, exercicio }: { empresa: EmpresaBalancete
               </tbody>
             </table>
           </div>
+        ) : semDadosModelo ? (
+          <p className="text-sm text-gray-500 text-center py-8">Sem dados disponíveis.</p>
         ) : (
           <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl p-4 overflow-auto max-h-72 whitespace-pre-wrap">
             {JSON.stringify(dados, null, 2)}
@@ -1349,12 +1393,11 @@ function PainelExercicio({
 
       {aba === 'saldos' && <PainelSaldos exercicioId={exercicio.id} moeda={empresa.moeda} />}
       {aba === 'balanco' && (
-        <PainelRelatorio titulo="Balanço" tipo="balanco" empresa={empresa} exercicio={exercicio} carregar={balanceteService.balanco} />
+        <PainelRelatorio titulo="Balanço" empresa={empresa} exercicio={exercicio} carregar={balanceteService.balanco} />
       )}
       {aba === 'dr' && (
         <PainelRelatorio
           titulo="Demonstração de Resultados"
-          tipo="dr"
           empresa={empresa}
           exercicio={exercicio}
           carregar={balanceteService.demonstracaoResultados}
