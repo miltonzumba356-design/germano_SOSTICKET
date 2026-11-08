@@ -16,10 +16,29 @@ const DJANGO_API_BASE_URL = normalizeDjangoBase(RAW_API_BASE_URL);
 // VITE_WHATSAPP_API_URL (legado, FastAPI localhost) é ignorado: usa o Django.
 export const WHATSAPP_API_URL = `${DJANGO_API_BASE_URL}/whatsapp`;
 
-export const WHATSAPP_WS_URL = (
-  import.meta.env?.VITE_WHATSAPP_WS_URL ||
-  `${DJANGO_API_BASE_URL.replace(/^http/i, 'ws').replace(/\/api\/v1$/, '')}/ws/whatsapp/`
-);
+// Host do backend em produção (o proxy do Vercel não encaminha WebSocket).
+const WS_HOST_PRODUCAO = 'suportapi-production-e15c.up.railway.app';
+
+function resolverWsUrl(): string {
+  const envUrl = import.meta.env?.VITE_WHATSAPP_WS_URL;
+  if (envUrl) return envUrl;
+
+  // API absoluta (ex.: VITE_API_URL=https://api...) -> deriva o ws do mesmo host
+  if (/^https?:\/\//i.test(DJANGO_API_BASE_URL)) {
+    return `${DJANGO_API_BASE_URL.replace(/^http/i, 'ws').replace(/\/api\/v1$/, '')}/ws/whatsapp/`;
+  }
+
+  // API relativa (proxy /api do Vercel): o WS tem de ir direto ao backend
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  if (host && host !== 'localhost' && host !== '127.0.0.1') {
+    return `wss://${WS_HOST_PRODUCAO}/ws/whatsapp/`;
+  }
+
+  const origem = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
+  return `${origem.replace(/^http/i, 'ws')}/ws/whatsapp/`;
+}
+
+export const WHATSAPP_WS_URL = resolverWsUrl();
 
 export class WhatsAppApiError extends Error {
   status: number;
