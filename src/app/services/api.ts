@@ -462,6 +462,8 @@ export const intervencoesService = {
     cliente_id?: string;
     contrato_id?: string;
     prioridade: string;
+    tecnico_id?: string;
+    modo_atribuicao?: string;
     tipo_pagamento?: string;
     tipo_intervencao?: string;
     actuacao_tipo?: string;
@@ -472,6 +474,8 @@ export const intervencoesService = {
     formData.append('descricao', dados.descricao);
     if (dados.cliente_id) formData.append('cliente_id', dados.cliente_id);
     if (dados.contrato_id) formData.append('contrato_id', dados.contrato_id);
+    if (dados.tecnico_id) formData.append('tecnico_id', dados.tecnico_id);
+    if (dados.modo_atribuicao) formData.append('modo_atribuicao', dados.modo_atribuicao);
     formData.append('prioridade', dados.prioridade);
     dados.anexos?.forEach((file) => {
       formData.append('anexos', file);
@@ -494,6 +498,7 @@ export const intervencoesService = {
   },
   atribuirTecnico: (id: string, tecnico_id: string) =>
     create(`/intervencoes/${id}/atribuir`, { tecnico_id }),
+  assumir: (id: string) => create(`/intervencoes/${id}/assumir`, {}),
 };
 
 export const configuracoesService = {

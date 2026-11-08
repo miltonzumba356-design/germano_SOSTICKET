@@ -139,6 +139,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
     cliente_id: '',
     contrato_id: '',
     prioridade: 'media' as any,
+    tecnico_id: '',
+    modo_atribuicao: 'individual' as string,
     anexos: [] as File[]
   });
   const [exibirModalDetalhes, setExibirModalDetalhes] = useState(false);
@@ -481,6 +483,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         ...(clienteIdFinal ? { cliente_id: clienteIdFinal } : {}),
         contrato_id: novoTicket.contrato_id || undefined,
         prioridade: novoTicket.prioridade,
+        tecnico_id: novoTicket.tecnico_id || undefined,
+        modo_atribuicao: novoTicket.modo_atribuicao,
         tipo_pagamento: contratoSelecionado?.tipo_de_pagamento || 'horas',
         tipo_intervencao: contratoSelecionado?.tipo_contrato || 'suporte',
         anexos: novoTicket.anexos
@@ -489,7 +493,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
       setStatus('success');
       setTimeout(() => {
         setExibirModalNovo(false);
-        setNovoTicket({ titulo: '', descricao: '', cliente_id: '', contrato_id: '', prioridade: 'media', anexos: [] });
+        setNovoTicket({ titulo: '', descricao: '', cliente_id: '', contrato_id: '', prioridade: 'media', tecnico_id: '', modo_atribuicao: 'individual', anexos: [] });
         setStatus('idle');
         carregarIntervencoes();
         // Perfil cliente: abre automaticamente a conversa recém-criada (composer inline em vez de modal)
@@ -829,6 +833,36 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                     <option value="urgente">Urgente</option>
                   </select>
                 </div>
+                {isAdmin && (
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Modo de atribuição</label>
+                      <select
+                        value={novoTicket.modo_atribuicao}
+                        onChange={(e) => setNovoTicket({...novoTicket, modo_atribuicao: e.target.value})}
+                        className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                      >
+                        <option value="individual">Individual (escolher técnico)</option>
+                        <option value="broadcast">Todos (quem pegar faz)</option>
+                      </select>
+                    </div>
+                    {novoTicket.modo_atribuicao === 'individual' && tecnicos.length > 0 && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Técnico</label>
+                        <select
+                          value={novoTicket.tecnico_id}
+                          onChange={(e) => setNovoTicket({...novoTicket, tecnico_id: e.target.value})}
+                          className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                        >
+                          <option value="">Selecione...</option>
+                          {tecnicos.map((t: any) => (
+                            <option key={t.id} value={t.id}>{t.nome}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
                 <div className="space-y-1">
@@ -1073,6 +1107,19 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                        title="Atribuir técnico"
                      >
                        <ShieldCheck className="w-4 h-4" />
+                     </button>
+                   )}
+                   {isTecnico && (intervencao as any).modo_atribuicao === 'broadcast' && !(intervencao as any).tecnico_id && (
+                     <button
+                       onClick={async (e) => {
+                         e.stopPropagation();
+                         await intervencoesService.assumir(intervencao.id);
+                         carregarIntervencoes(true);
+                       }}
+                       className="px-3 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+                       title="Assumir intervenção (broadcast)"
+                     >
+                       Assumir
                      </button>
                    )}
                    <button 
