@@ -28,11 +28,6 @@ export const adminMenu: MenuItem[] = [
     icon: LayoutDashboard,
   },
   {
-    id: 'clientes',
-    label: 'Utilizadores',
-    icon: Users,
-  },
-  {
     id: 'empresas',
     label: 'Empresas',
     icon: Building2,
