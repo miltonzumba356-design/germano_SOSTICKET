@@ -243,20 +243,29 @@ export function Empresas({ onNavigate }: { onNavigate?: (pagina: string) => void
             <p className="text-gray-500 font-medium">Nenhuma empresa cadastrada.</p>
           </div>
         ) : empresas.map((empresa) => (
-          <button
+          <div
             key={empresa.id}
-            onClick={() => abrirDetalhes(empresa)}
-            className="bg-white border border-gray-100 rounded-2xl shadow-sm p-6 text-left hover:border-indigo-200 hover:shadow-md transition-all"
+            onClick={() => onNavigate?.(`empresas_clientes_${empresa.id}`)}
+            className="bg-white border border-gray-100 rounded-2xl shadow-sm p-6 text-left hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer"
           >
             <div className="flex items-start justify-between gap-4 mb-5">
               <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                 <Building2 className="w-6 h-6" />
               </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); abrirEdicao(empresa); }}
+                  aria-label="Editar empresa"
+                  className="p-2 hover:bg-indigo-50 rounded-lg text-indigo-600"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
               <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${
                 empresa.status === 'inactivo' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
               }`}>
                 {empresa.status === 'inactivo' ? 'Inativa' : 'Ativa'}
               </span>
+            </div>
             </div>
 
             <h3 className="text-lg font-black text-gray-900 mb-1">{empresa.nome}</h3>
@@ -276,7 +285,7 @@ export function Empresas({ onNavigate }: { onNavigate?: (pagina: string) => void
                 <span>{empresa.endereco || 'Sem endereço'}</span>
               </div>
             </div>
-          </button>
+          </div>
         ))}
       </div>
 

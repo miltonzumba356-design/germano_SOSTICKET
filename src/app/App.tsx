@@ -6,6 +6,7 @@ import { Dashboard } from './components/Dashboard';
 import { Intervencoes } from './components/Intervencoes';
 import { Clientes } from './components/Clientes';
 import { Empresas } from './components/Empresas';
+import { EmpresaClientes } from './components/EmpresaClientes';
 import { Tecnicos } from './components/Tecnicos';
 import { Contratos } from './components/Contratos';
 import { Relatorios } from './components/Relatorios';
@@ -51,6 +52,11 @@ function AppContent() {
     // Clientes handles
     if (paginaAtual === 'clientes' || paginaAtual.startsWith('clientes_')) {
       return <Clientes />;
+    }
+
+    if (paginaAtual.startsWith('empresas_clientes_')) {
+      const id = paginaAtual.replace('empresas_clientes_', '');
+      return <EmpresaClientes empresaId={id} onNavigate={setPaginaAtual} />;
     }
 
     if (paginaAtual === 'empresas' || paginaAtual.startsWith('empresas_')) {
