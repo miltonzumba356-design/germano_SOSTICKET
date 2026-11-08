@@ -535,7 +535,9 @@ export const respostasRapidasService = {
 
 export const fiscalService = {
   categorias: () => list<any>('/fiscal/categorias'),
+  criarCategoria: (d: any) => create('/fiscal/categorias', d),
   obrigacoes: () => list<any>('/fiscal/obrigacoes'),
+  criarObrigacao: (d: any) => create('/fiscal/obrigacoes', d),
   tarefas: () => list<any>('/fiscal/tarefas'),
   documentos: () => list<any>('/fiscal/documentos'),
   alertas: () => fetchAPI<any>('/fiscal/calendario/alertas'),
