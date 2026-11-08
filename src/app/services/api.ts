@@ -437,6 +437,11 @@ export const empresasService = {
   atualizar: (id: string, dados: Partial<Empresa>) => update<Empresa>(`/empresas/${id}`, dados),
   atualizacaoParcial: (id: string, dados: Partial<Empresa>) => update<Empresa>(`/empresas/${id}`, dados, 'PATCH'),
   deletar: (id: string) => fetchAPI<void>(`/empresas/${id}`, { method: 'DELETE' }),
+  enviarFoto: (id: string, ficheiro: File) => {
+    const formData = new FormData();
+    formData.append('ficheiro', ficheiro, ficheiro.name);
+    return create(`/empresas/${id}/avatar`, formData);
+  },
 };
 
 export const tecnicosService = {

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Building2, CheckCircle2, Mail, MapPin, Phone, Plus, Search, Server, X, AlertCircle, Loader2, Pencil, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Building2, CheckCircle2, Mail, MapPin, Phone, Plus, Search, Server, Upload, X, AlertCircle, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { Empresa } from '../types/api';
 import { clientesService, empresasService } from '../services/api';
 
@@ -35,6 +35,7 @@ export function Empresas({ onNavigate }: { onNavigate?: (pagina: string) => void
   const [statusEnvio, setStatusEnvio] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [formData, setFormData] = useState(formInicial);
   const [listaPostos, setListaPostos] = useState([{ id: '', nome: '' }]);
+  const fotoRef = useRef<HTMLInputElement>(null);
 
   const carregarEmpresas = async () => {
     setCarregando(true);
@@ -304,6 +305,33 @@ export function Empresas({ onNavigate }: { onNavigate?: (pagina: string) => void
                 <Input label="Nome da empresa *" name="nome" value={formData.nome} onChange={setFormData} required />
                 <Input label="E-mail da empresa *" name="Email_empresa" type="email" value={formData.Email_empresa} onChange={setFormData} required />
                 <Input label="NIF *" name="nif" value={formData.nif} onChange={setFormData} required />
+                <div className="md:col-span-2 flex items-center gap-4">
+                  <input ref={fotoRef} type="file" accept="image/*" className="hidden"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (f && empresaEdicao) {
+                        setStatusEnvio('loading');
+                        try {
+                          await empresasService.enviarFoto(empresaEdicao.id, f);
+                          setStatusEnvio('success');
+                          carregarEmpresas();
+                        } catch (err: any) {
+                          setErro(err?.message || 'Falha no upload da foto.');
+                        } finally {
+                          setTimeout(() => setStatusEnvio('idle'), 2000);
+                        }
+                      }
+                    }} />
+                  {empresaEdicao?.avatar_url ? (
+                    <img src={empresaEdicao.avatar_url} alt="" className="w-14 h-14 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><Building2 className="w-6 h-6" /></div>
+                  )}
+                  <button type="button" onClick={() => fotoRef.current?.click()}
+                    className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-lg flex items-center gap-1">
+                    <Upload className="w-3.5 h-3.5" /> Foto da empresa
+                  </button>
+                </div>
                 <Input label="Telefone *" name="telefone" value={formData.telefone} onChange={setFormData} required />
                 <div className="md:col-span-2">
                   <Input label="Endereço *" name="endereco" value={formData.endereco} onChange={setFormData} required />
