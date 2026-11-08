@@ -532,3 +532,12 @@ export const relatoriosService = {
 export const respostasRapidasService = {
   listar: () => list<any>('/respostas-rapidas?ativa=true'),
 };
+
+export const fiscalService = {
+  categorias: () => list<any>('/fiscal/categorias'),
+  obrigacoes: () => list<any>('/fiscal/obrigacoes'),
+  tarefas: () => list<any>('/fiscal/tarefas'),
+  documentos: () => list<any>('/fiscal/documentos'),
+  alertas: () => fetchAPI<any>('/fiscal/calendario/alertas'),
+  resumo: () => fetchAPI<any>('/fiscal/calendario/resumo'),
+};

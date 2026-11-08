@@ -11,6 +11,7 @@ import {
   Monitor,
   Landmark,
   Calculator,
+  CalendarDays,
   MessageCircle,
   LucideIcon
 } from 'lucide-react';
@@ -47,6 +48,11 @@ export const adminMenu: MenuItem[] = [
     id: 'whatsapp',
     label: 'WhatsApp',
     icon: MessageCircle,
+  },
+  {
+    id: 'fiscal',
+    label: 'Calendário Fiscal',
+    icon: CalendarDays,
   },
   {
     id: 'tecnicos',

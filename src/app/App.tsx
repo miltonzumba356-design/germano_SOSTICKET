@@ -7,6 +7,7 @@ import { Intervencoes } from './components/Intervencoes';
 import { Clientes } from './components/Clientes';
 import { Empresas } from './components/Empresas';
 import { WhatsAppInbox } from './components/WhatsAppInbox';
+import { CalendarioFiscal } from './components/CalendarioFiscal';
 import { EmpresaClientes } from './components/EmpresaClientes';
 import { Tecnicos } from './components/Tecnicos';
 import { Contratos } from './components/Contratos';
@@ -62,6 +63,10 @@ function AppContent() {
 
     if (paginaAtual === 'whatsapp' || paginaAtual.startsWith('whatsapp_')) {
       return <WhatsAppInbox />;
+    }
+
+    if (paginaAtual === 'fiscal' || paginaAtual.startsWith('fiscal_')) {
+      return <CalendarioFiscal />;
     }
 
     if (paginaAtual === 'empresas' || paginaAtual.startsWith('empresas_')) {
