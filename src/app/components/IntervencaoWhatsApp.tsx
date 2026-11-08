@@ -263,18 +263,9 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
         const ficheiro = new File([blob], `audio-${Date.now()}.${extensao}`, { type: tipo });
         setEnviando(true);
         try {
-          const resp: any = await whatsappService.enviarAudio(numero, ficheiro);
-          const urlAudio = resp?.cloudinaryUrl || resp?.data?.cloudinaryUrl || null;
-          setMensagens((lista) => ordenar([...lista, {
-            id: `local-${Date.now()}`,
-            numero,
-            texto: '',
-            fromMe: true,
-            data: new Date().toISOString(),
-            tipo: 'audio',
-            mediaUrl: urlAudio,
-            raw: null,
-          } as Mensagem]));
+          await whatsappService.enviarAudio(numero, ficheiro);
+          // recarrega do servidor: evita bolha local + eco do WebSocket (duplicado)
+          await carregar(numeroRef.current, true);
         } catch (erroAudio) {
           setErroEnvio(mensagemErro(erroAudio, 'Falha ao enviar o áudio.'));
         } finally {
