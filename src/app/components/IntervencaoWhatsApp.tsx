@@ -141,10 +141,12 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
   }, [numero]);
 
 
-  const carregar = useCallback(async (alvo: string) => {
+  const carregar = useCallback(async (alvo: string, silencioso = false) => {
     if (!alvo) return;
-    setCarregando(true);
-    setErro(null);
+    if (!silencioso) {
+      setCarregando(true);
+      setErro(null);
+    }
     try {
       // Histórico guardado pelo webhook (SQLite) + recebidas; se vazio, vai à Evolution
       const [doContato, recebidas] = await Promise.all([
@@ -155,9 +157,9 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
       if (lista.length === 0) lista = await whatsappService.mensagensPorNumero(alvo);
       if (numeroRef.current === alvo) setMensagens(ordenar(lista));
     } catch (e) {
-      if (numeroRef.current === alvo) setErro(mensagemErro(e, 'Não foi possível carregar as mensagens WhatsApp.'));
+      if (!silencioso && numeroRef.current === alvo) setErro(mensagemErro(e, 'Não foi possível carregar as mensagens WhatsApp.'));
     } finally {
-      if (numeroRef.current === alvo) setCarregando(false);
+      if (!silencioso && numeroRef.current === alvo) setCarregando(false);
     }
   }, []);
 
@@ -180,6 +182,13 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
     });
     return () => ligacao.fechar();
   }, [numero]);
+
+  // Rede de segurança: sem WebSocket (ex.: proxy/ASGI em baixo), actualiza a cada 8s
+  useEffect(() => {
+    if (!numero || wsLigado) return;
+    const id = window.setInterval(() => carregar(numero, true), 8000);
+    return () => window.clearInterval(id);
+  }, [numero, wsLigado, carregar]);
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
