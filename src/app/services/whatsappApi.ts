@@ -1,18 +1,24 @@
-// Cliente da "API WhatsApp - Simples" (FastAPI + Evolution API / Electrosoft).
-// Especificação: doc_apiWhat.txt (OpenAPI 3.1).
-//
-//  - Receber: Electrosoft -> POST /webhook -> SQLite -> WS /ws -> frontend
-//  - Enviar:  frontend -> POST /api/enviar | /api/enviar-media | /api/enviar-cloudinary
-//  - Ler:     GET /api/contatos, /api/conversas, /api/mensagens/...
+// Cliente WhatsApp via Suporte API (Django/DRF).
+//  - Receber: Electrosoft -> POST /api/v1/webhook/whatsapp (Django) -> Conversa/Mensagem -> WS ws/whatsapp/ -> frontend
+//  - Enviar:  frontend -> POST /api/v1/whatsapp/enviar | /enviar-media | /enviar-cloudinary (JWT)
+//  - Ler:     GET /api/v1/whatsapp/conversas, /api/v1/whatsapp/mensagens
 
-const DEFAULT_WHATSAPP_API_URL = 'http://localhost:8000';
+function normalizeDjangoBase(value: string) {
+  const baseUrl = value.replace(/\/+$/, '');
+  if (baseUrl.endsWith('/api/v1')) return baseUrl;
+  if (baseUrl.endsWith('/api')) return `${baseUrl}/v1`;
+  return `${baseUrl}/api/v1`;
+}
 
-export const WHATSAPP_API_URL = (
-  import.meta.env?.VITE_WHATSAPP_API_URL || DEFAULT_WHATSAPP_API_URL
-).replace(/\/+$/, '');
+const RAW_API_BASE_URL = import.meta.env?.VITE_API_URL || '/api';
+const DJANGO_API_BASE_URL = normalizeDjangoBase(RAW_API_BASE_URL);
+
+// VITE_WHATSAPP_API_URL (legado, FastAPI localhost) é ignorado: usa o Django.
+export const WHATSAPP_API_URL = `${DJANGO_API_BASE_URL}/whatsapp`;
 
 export const WHATSAPP_WS_URL = (
-  import.meta.env?.VITE_WHATSAPP_WS_URL || `${WHATSAPP_API_URL.replace(/^http/i, 'ws')}/ws`
+  import.meta.env?.VITE_WHATSAPP_WS_URL ||
+  `${DJANGO_API_BASE_URL.replace(/^http/i, 'ws').replace(/\/api\/v1$/, '')}/ws/whatsapp/`
 );
 
 export class WhatsAppApiError extends Error {
@@ -176,11 +182,11 @@ export function normalizarMensagem(v: unknown, numeroPadrao = ''): Mensagem {
     direcao ? ['saida', 'saída', 'out', 'outgoing', 'enviada', 'sent'].includes(direcao) :
     false;
 
-  const numero = limparNumero(str(m.numero, m.remoteJid, key.remoteJid, m.contato_numero, m.from, m.to) ?? numeroPadrao);
-  const data = dataIso(m.data ?? m.data_hora ?? m.created_at ?? m.criado_em ?? m.timestamp ?? m.messageTimestamp ?? m.recebida_em);
+  const numero = limparNumero(str(m.numero, m.remoteJid, key.remoteJid, m.contato_numero, m.from, m.to, (m as Obj).conversa_numero) ?? numeroPadrao);
+  const data = dataIso(m.data ?? m.data_hora ?? m.data_criacao ?? m.created_at ?? m.criado_em ?? m.timestamp ?? m.messageTimestamp ?? m.recebida_em);
 
   return {
-    id: str(m.id, key.id, m.message_id) ?? `${numero}-${data ?? ''}-${Math.random().toString(36).slice(2, 8)}`,
+    id: str(m.id, m.wa_id, key.id, m.message_id) ?? `${numero}-${data ?? ''}-${Math.random().toString(36).slice(2, 8)}`,
     numero,
     texto: textoMensagem(m),
     fromMe,
@@ -193,14 +199,15 @@ export function normalizarMensagem(v: unknown, numeroPadrao = ''): Mensagem {
 
 export function normalizarContato(v: unknown): Contato {
   const c: Obj = isObj(v) ? v : { numero: v };
-  const ultima = isObj(c.ultima_mensagem) ? c.ultima_mensagem : isObj(c.lastMessage) ? c.lastMessage : null;
+  const ultima = isObj(c.ultima_mensagem) ? c.ultima_mensagem : isObj(c.lastMessage) ? c.lastMessage : isObj(c.ultimaMensagem) ? c.ultimaMensagem : null;
+  // Django ConversaSerializer: numero, nome, ultima_mensagem (texto), ultima_mensagem_em, nao_lidas
   return {
     numero: limparNumero(str(c.numero, c.remoteJid, c.id, c.jid, c.telefone) ?? ''),
     nome: str(c.nome, c.pushName, c.name, c.push_name),
     ultimaMensagem: ultima ? textoMensagem(ultima) : str(c.ultima_mensagem, c.ultimaMensagem, c.ultimo_texto, c.texto),
     ultimaData: dataIso(
       ultima?.data ?? ultima?.timestamp ?? ultima?.messageTimestamp ??
-      c.ultima_data ?? c.ultimaData ?? c.atualizado_em ?? c.updated_at ?? c.data,
+      c.ultima_mensagem_em ?? c.ultima_data ?? c.ultimaData ?? c.atualizado_em ?? c.updated_at ?? c.data ?? c.data_actualizacao,
     ),
     naoLidas: Number(c.nao_lidas ?? c.naoLidas ?? c.unreadCount ?? 0) || 0,
     raw: v,
@@ -210,6 +217,13 @@ export function normalizarContato(v: unknown): Contato {
 export function normalizarEventoWS(payload: unknown): EventoWS {
   const d: Obj = isObj(payload) ? payload : {};
   const event = str(d.event, d.evento, d.type) ?? 'desconhecido';
+
+  // Django Channels (apps/sistema): payload plano {conversa_id, numero, nome, texto, direcao, enviado_por, data_hora}
+  if (!d.event && (d.numero || d.texto) && (d.direcao || d.conversa_id)) {
+    const contato = normalizarContato({ numero: limparNumero(d.numero), nome: d.nome });
+    const mensagem = normalizarMensagem({ ...d, numero: limparNumero(d.numero), data_hora: d.data_hora }, contato.numero);
+    return { event: 'messages.upsert', contato, mensagem, raw: payload };
+  }
 
   if (event === 'messages.upsert') {
     const contato = d.contato ? normalizarContato(d.contato) : null;
@@ -259,10 +273,22 @@ async function pedido<T = unknown>(caminho: string, init: RequestInit = {}): Pro
     headers.set('Content-Type', 'application/json');
   }
   headers.set('Accept', 'application/json');
+  const token = localStorage.getItem('auth_token');
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  // Django router (DRF) exige "/" final; os path() /enviar* não levam.
+  const ehPathRouter = caminho.startsWith("/conversas") || caminho.startsWith("/mensagens");
+  let caminhoFinal = caminho;
+  if (ehPathRouter) {
+    const [p, q = ""] = caminho.split("?");
+    if (!p.endsWith("/")) caminhoFinal = `${p}/${q ? `?${q}` : ""}`;
+  }
 
   let resposta: Response;
   try {
-    resposta = await fetch(`${WHATSAPP_API_URL}${caminho}`, { ...init, headers });
+    resposta = await fetch(`${WHATSAPP_API_URL}${caminhoFinal}`, { ...init, headers });
   } catch (erro) {
     throw new WhatsAppApiError(0, mensagemDeErro(null, 0), erro);
   }
@@ -278,6 +304,14 @@ async function pedido<T = unknown>(caminho: string, init: RequestInit = {}): Pro
 }
 
 const seg = (numero: string) => encodeURIComponent(limparNumero(numero));
+
+async function conversaIdPorNumero(numero: string): Promise<string | null> {
+  const n = limparNumero(numero);
+  const raw: any = await pedido(`/conversas?numero=${encodeURIComponent(n)}`);
+  const arr = lista(raw);
+  const achado: any = arr.find((x: any) => limparNumero(String((x as Obj).numero ?? '')) === n);
+  return achado?.id ? String(achado.id) : null;
+}
 
 /** Converte um File para base64 puro (sem prefixo data:). */
 export function ficheiroParaBase64(ficheiro: File): Promise<string> {
@@ -297,24 +331,27 @@ export function mediatypeDe(mimetype: string): 'image' | 'video' | 'audio' | 'do
 }
 
 export const whatsappService = {
-  /** GET / — estado + ligadosWS */
+  /** ping via conversas (Django não tem GET /) */
   async estado(): Promise<EstadoApi> {
-    const raw = await pedido<Obj>('/');
-    const ligados = Number(raw?.ligadosWS ?? raw?.ligados_ws);
-    return { ok: true, ligadosWS: Number.isFinite(ligados) ? ligados : undefined, raw };
+    try {
+      await pedido('/conversas?limit=1');
+      return { ok: true, raw: 'ok' };
+    } catch (e) {
+      throw e;
+    }
   },
 
-  /** POST /api/enviar */
+  /** POST /enviar */
   enviar(dados: EnviarRequest) {
-    return pedido('/api/enviar', {
+    return pedido('/enviar', {
       method: 'POST',
       body: JSON.stringify({ numero: limparNumero(dados.numero), texto: dados.texto }),
     });
   },
 
-  /** POST /api/enviar-media — media em base64 ou url pública */
+  /** POST /enviar-media — media em base64 ou url pública */
   enviarMedia(dados: EnviarMediaRequest) {
-    return pedido('/api/enviar-media', {
+    return pedido('/enviar-media', {
       method: 'POST',
       body: JSON.stringify({
         mediatype: 'document',
@@ -326,75 +363,85 @@ export const whatsappService = {
     });
   },
 
-  /** POST /api/enviar-cloudinary — multipart: numero, ficheiro, caption? */
+  /** POST /enviar-cloudinary — multipart: numero, ficheiro, caption? */
   enviarCloudinary(numero: string, ficheiro: File, caption?: string | null) {
     const form = new FormData();
     form.append('numero', limparNumero(numero));
     form.append('ficheiro', ficheiro, ficheiro.name);
     if (caption) form.append('caption', caption);
-    return pedido('/api/enviar-cloudinary', { method: 'POST', body: form });
+    return pedido('/enviar-cloudinary', { method: 'POST', body: form });
   },
 
-  /** GET /api/conversas */
+  /** GET /conversas */
   async conversas(): Promise<Contato[]> {
-    return lista(await pedido('/api/conversas')).map(normalizarContato).filter((c) => c.numero);
+    return lista(await pedido('/conversas')).map(normalizarContato).filter((c) => c.numero);
   },
 
-  /** GET /api/mensagens/recebidas */
+  /** GET /mensagens (guardadas no Django — todas) */
   async mensagensRecebidas(): Promise<Mensagem[]> {
-    return lista(await pedido('/api/mensagens/recebidas')).map((m) => normalizarMensagem(m));
+    return lista(await pedido('/mensagens')).map((m) => normalizarMensagem(m));
   },
 
-  /** GET /api/mensagens/recebidas/{numero} */
+  /** GET /mensagens?conversa={uuid} (por número) */
   async mensagensRecebidasPorNumero(numero: string): Promise<Mensagem[]> {
-    return lista(await pedido(`/api/mensagens/recebidas/${seg(numero)}`)).map((m) => normalizarMensagem(m, limparNumero(numero)));
+    const n = limparNumero(numero);
+    const id = await conversaIdPorNumero(n);
+    if (!id) return [];
+    return lista(await pedido(`/mensagens?conversa=${encodeURIComponent(id)}`)).map((m) => normalizarMensagem(m, n));
   },
 
-  /** GET /api/mensagens — directamente da Evolution */
+  /** (compat FastAPI) — no Django lê do banco local */
   async mensagens(): Promise<Mensagem[]> {
-    return lista(await pedido('/api/mensagens')).map((m) => normalizarMensagem(m));
+    return this.mensagensRecebidas();
   },
 
-  /** GET /api/mensagens/{numero} — directamente da Evolution */
   async mensagensPorNumero(numero: string): Promise<Mensagem[]> {
-    return lista(await pedido(`/api/mensagens/${seg(numero)}`)).map((m) => normalizarMensagem(m, limparNumero(numero)));
+    return this.mensagensRecebidasPorNumero(numero);
   },
 
-  /** GET /api/contatos */
+  /** GET /conversas (contatos = conversas no Django) */
   async listarContatos(): Promise<Contato[]> {
-    return lista(await pedido('/api/contatos')).map(normalizarContato).filter((c) => c.numero);
+    return this.conversas();
   },
 
-  /** GET /api/contatos/{numero} */
+  /** GET /conversas?numero= */
   async selecionarContato(numero: string): Promise<Contato> {
-    const raw = await pedido(`/api/contatos/${seg(numero)}`);
-    return normalizarContato(isObj(raw) && isObj(raw.contato) ? raw.contato : raw);
+    const n = limparNumero(numero);
+    const raw: any = await pedido(`/conversas?numero=${encodeURIComponent(n)}`);
+    const arr = lista(raw);
+    const achado = arr.find((x: any) => limparNumero(String((x as Obj).numero ?? '')) === n);
+    if (!achado) throw new WhatsAppApiError(404, 'Contato não encontrado.', raw);
+    return normalizarContato(achado);
   },
 
-  /** POST /api/contatos */
+  /** POST /conversas */
   criarContato(dados: ContatoCreate) {
-    return pedido('/api/contatos', {
+    return pedido('/conversas', {
       method: 'POST',
       body: JSON.stringify({ numero: limparNumero(dados.numero), nome: dados.nome || null }),
     });
   },
 
-  /** PUT /api/contatos/{numero} */
-  alterarContato(numero: string, dados: ContatoUpdate) {
-    return pedido(`/api/contatos/${seg(numero)}`, {
+  /** PUT /conversas/{uuid} (resolve o uuid pelo número) */
+  async alterarContato(numero: string, dados: ContatoUpdate) {
+    const id = await conversaIdPorNumero(numero);
+    if (!id) throw new WhatsAppApiError(404, 'Contato não encontrado.', null);
+    return pedido(`/conversas/${id}`, {
       method: 'PUT',
       body: JSON.stringify({ nome: dados.nome || null }),
     });
   },
 
-  /** DELETE /api/contatos/{numero} */
-  apagarContato(numero: string) {
-    return pedido(`/api/contatos/${seg(numero)}`, { method: 'DELETE' });
+  /** DELETE /conversas/{uuid} */
+  async apagarContato(numero: string) {
+    const id = await conversaIdPorNumero(numero);
+    if (!id) throw new WhatsAppApiError(404, 'Contato não encontrado.', null);
+    return pedido(`/conversas/${id}`, { method: 'DELETE' });
   },
 
-  /** GET /api/contatos/{numero}/mensagens — histórico guardado no SQLite */
+  /** Histórico por número (via conversas → mensagens) */
   async mensagensDoContato(numero: string): Promise<Mensagem[]> {
-    return lista(await pedido(`/api/contatos/${seg(numero)}/mensagens`)).map((m) => normalizarMensagem(m, limparNumero(numero)));
+    return this.mensagensRecebidasPorNumero(numero);
   },
 };
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Building2, CheckCircle2, Mail, MapPin, Phone, Plus, Search, Server, X, AlertCircle, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { Empresa } from '../types/api';
-import { empresasService } from '../services/api';
+import { clientesService, empresasService } from '../services/api';
 
 function getEmpresaEmail(empresa: Empresa) {
   return empresa.Email_empresa || empresa.email || '';
@@ -29,6 +29,8 @@ export function Empresas() {
   const [exibirModal, setExibirModal] = useState(false);
   const [exibirDetalhes, setExibirDetalhes] = useState(false);
   const [empresaSelecionada, setEmpresaSelecionada] = useState<Empresa | null>(null);
+  const [utilizadores, setUtilizadores] = useState<any[]>([]);
+  const [carregandoUtilizadores, setCarregandoUtilizadores] = useState(false);
   const [empresaEdicao, setEmpresaEdicao] = useState<Empresa | null>(null);
   const [statusEnvio, setStatusEnvio] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [formData, setFormData] = useState(formInicial);
@@ -133,6 +135,7 @@ export function Empresas() {
 
   const abrirDetalhes = async (empresa: Empresa) => {
     setErro('');
+    setUtilizadores([]);
     try {
       const detalhe = await empresasService.obterPorId(empresa.id);
       setEmpresaSelecionada(detalhe);
@@ -141,6 +144,16 @@ export function Empresas() {
       setEmpresaSelecionada(empresa);
     }
     setExibirDetalhes(true);
+    try {
+      setCarregandoUtilizadores(true);
+      const resp: any = await clientesService.listar({ empresa: empresa.id } as any);
+      const lista = Array.isArray(resp) ? resp : (resp?.results || resp?.data || []);
+      setUtilizadores(Array.isArray(lista) ? lista : []);
+    } catch {
+      setUtilizadores([]);
+    } finally {
+      setCarregandoUtilizadores(false);
+    }
   };
 
   const abrirEdicao = (empresa: Empresa) => {
@@ -391,6 +404,27 @@ export function Empresas() {
                 <div className="md:col-span-2">
                   <Info label="Endereço" value={empresaSelecionada.endereco || 'Sem endereço'} />
                 </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Utilizadores ({utilizadores.length})</h4>
+                {carregandoUtilizadores ? (
+                  <p className="text-sm text-gray-500">A carregar...</p>
+                ) : utilizadores.length ? (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {utilizadores.map((u: any) => (
+                      <div key={u.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between text-sm">
+                        <div>
+                          <p className="font-bold text-gray-800">{u.nome}</p>
+                          <p className="text-xs text-gray-500">{u.email || ''} · {u.telefone || 'sem telefone'}</p>
+                        </div>
+                        <span className="text-xs font-bold text-gray-500 uppercase">{u.perfil || ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Sem utilizadores nesta empresa.</p>
+                )}
               </div>
 
               <div>

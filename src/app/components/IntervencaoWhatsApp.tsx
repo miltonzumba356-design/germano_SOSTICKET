@@ -262,8 +262,12 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
               {m.mediaUrl && /^https?:/i.test(m.mediaUrl) && (
                 m.tipo === 'image' || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(m.mediaUrl) ? (
                   <a href={m.mediaUrl} target="_blank" rel="noreferrer"><img src={m.mediaUrl} alt="" className="rounded-md max-h-60 mb-1" /></a>
+                ) : m.tipo === 'video' || /\.(mp4|webm|mov)(\?|$)/i.test(m.mediaUrl) ? (
+                  <video src={m.mediaUrl} controls className="rounded-md max-h-60 w-full mb-1" />
+                ) : m.tipo === 'audio' || /\.(mp3|ogg|m4a|wav)(\?|$)/i.test(m.mediaUrl) ? (
+                  <audio src={m.mediaUrl} controls className="w-full mb-1" />
                 ) : (
-                  <a href={m.mediaUrl} target="_blank" rel="noreferrer" className="block text-emerald-700 underline mb-1">Abrir anexo</a>
+                  <a href={m.mediaUrl} target="_blank" rel="noreferrer" className="block text-emerald-700 underline mb-1">Abrir anexo{m.fileName ? ` — ${m.fileName}` : ''}</a>
                 )
               )}
               {m.texto || (!m.mediaUrl && <span className="italic text-gray-400">(sem texto)</span>)}
