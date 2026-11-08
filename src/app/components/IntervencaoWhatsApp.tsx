@@ -4,6 +4,7 @@ import type { Intervencao } from '../types/api';
 import { clientesService, respostasRapidasService } from '../services/api';
 import {
   Mensagem,
+  WHATSAPP_WS_URL,
   WhatsAppApiError,
   ficheiroParaBase64,
   ligarWhatsAppWS,
@@ -19,6 +20,14 @@ export function numeroWhatsApp(telefone?: string | null): string {
   // Números angolanos sem indicativo (9 dígitos a começar por 9)
   if (/^9\d{8}$/.test(n)) n = `244${n}`;
   return n;
+}
+
+/** Compara dois números tolerando formatos/indicativos (usa os ultimos 9 digitos). */
+function mesmoNumero(a?: string | null, b?: string | null) {
+  const na = numeroWhatsApp(a);
+  const nb = numeroWhatsApp(b);
+  if (!na || !nb) return false;
+  return na === nb || na.slice(-9) === nb.slice(-9);
 }
 
 function mensagemErro(erro: unknown, fallback: string) {
@@ -181,7 +190,7 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
       onEvento: (evento) => {
         if (evento.event !== 'messages.upsert' || !('mensagem' in evento) || !evento.mensagem) return;
         const alvo = evento.mensagem.numero || evento.contato?.numero;
-        if (alvo && numeroWhatsApp(alvo) === numeroRef.current) {
+        if (alvo && mesmoNumero(alvo, numeroRef.current)) {
           setMensagens((lista) => ordenar([...lista, evento.mensagem as Mensagem]));
         }
       },
@@ -189,12 +198,13 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
     return () => ligacao.fechar();
   }, [numero]);
 
-  // Rede de segurança: sem WebSocket (ex.: proxy/ASGI em baixo), actualiza a cada 8s
+  // Rede de segurança: actualiza sempre a cada 10s (o WS pode ligar e nao receber nada,
+  // ex.: webhook tratado por outro processo/instancia). Mantem o chat coerente.
   useEffect(() => {
-    if (!numero || wsLigado) return;
-    const id = window.setInterval(() => carregar(numero, true), 8000);
+    if (!numero) return;
+    const id = window.setInterval(() => carregar(numero, true), 10000);
     return () => window.clearInterval(id);
-  }, [numero, wsLigado, carregar]);
+  }, [numero, carregar]);
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -341,7 +351,7 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
           <p className="text-[11px] text-emerald-100">+{numero}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold" title={wsLigado ? 'Mensagens em tempo real' : 'A ligar ao tempo real...'}>
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold" title={`${wsLigado ? 'Mensagens em tempo real' : 'A ligar ao tempo real...'} — ${WHATSAPP_WS_URL}`}>
             {wsLigado ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5 opacity-70" />}
             {wsLigado ? 'ao vivo' : '...'}
           </span>
