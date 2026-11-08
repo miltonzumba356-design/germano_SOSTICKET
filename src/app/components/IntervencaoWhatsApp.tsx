@@ -170,9 +170,8 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
       setErro(null);
     }
     try {
-      // Histórico guardado pelo webhook (Django) — uma só leitura, sem duplicar a lista
-      let lista = await whatsappService.mensagensRecebidasPorNumero(alvo).catch(() => [] as Mensagem[]);
-      if (!lista.length) lista = await whatsappService.mensagensPorNumero(alvo).catch(() => [] as Mensagem[]);
+      // Histórico guardado pelo webhook (Django) — uma só leitura
+      const lista = await whatsappService.mensagensRecebidasPorNumero(alvo).catch(() => [] as Mensagem[]);
       if (numeroRef.current === alvo) setMensagens(ordenar(lista));
     } catch (e) {
       if (!silencioso && numeroRef.current === alvo) setErro(mensagemErro(e, 'Não foi possível carregar as mensagens WhatsApp.'));

@@ -326,10 +326,18 @@ const seg = (numero: string) => encodeURIComponent(limparNumero(numero));
 
 async function conversaIdPorNumero(numero: string): Promise<string | null> {
   const n = limparNumero(numero);
-  const raw: any = await pedido(`/conversas?numero=${encodeURIComponent(n)}`);
-  const arr = lista(raw);
-  const achado: any = arr.find((x: any) => limparNumero(String((x as Obj).numero ?? '')) === n);
-  return achado?.id ? String(achado.id) : null;
+  const sufixo = n.slice(-9);
+  const cruzar = (arr: any[]) =>
+    arr.find((x: any) => limparNumero(String((x as Obj).numero ?? '')) === n) ||
+    arr.find((x: any) => limparNumero(String((x as Obj).numero ?? '')).slice(-9) === sufixo);
+
+  // 1) filtro exacto no servidor
+  const direto: any = cruzar(lista(await pedido(`/conversas?numero=${encodeURIComponent(n)}&limit=50`)));
+  if (direto?.id) return String(direto.id);
+
+  // 2) formatos diferentes (indicativo/9 dígitos): procura na lista completa
+  const todas: any = cruzar(lista(await pedido('/conversas?limit=200')));
+  return todas?.id ? String(todas.id) : null;
 }
 
 /** Converte um File para base64 puro (sem prefixo data:). */
@@ -401,12 +409,12 @@ export const whatsappService = {
 
   /** GET /conversas */
   async conversas(): Promise<Contato[]> {
-    return lista(await pedido('/conversas')).map(normalizarContato).filter((c) => c.numero);
+    return lista(await pedido('/conversas?limit=200')).map(normalizarContato).filter((c) => c.numero);
   },
 
-  /** GET /mensagens (guardadas no Django — todas) */
+  /** GET /mensagens (guardadas no Django - todas) */
   async mensagensRecebidas(): Promise<Mensagem[]> {
-    return lista(await pedido('/mensagens')).map((m) => normalizarMensagem(m));
+    return lista(await pedido('/mensagens?limit=300')).map((m) => normalizarMensagem(m));
   },
 
   /** GET /mensagens?conversa={uuid} (por número) */
@@ -414,7 +422,7 @@ export const whatsappService = {
     const n = limparNumero(numero);
     const id = await conversaIdPorNumero(n);
     if (!id) return [];
-    return lista(await pedido(`/mensagens?conversa=${encodeURIComponent(id)}`)).map((m) => normalizarMensagem(m, n));
+    return lista(await pedido(`/mensagens?conversa=${encodeURIComponent(id)}&limit=300`)).map((m) => normalizarMensagem(m, n));
   },
 
   /** (compat FastAPI) — no Django lê do banco local */
