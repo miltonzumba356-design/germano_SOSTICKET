@@ -1,0 +1,715 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "API WhatsApp - Simples",
+    "description": "# API WhatsApp Simples — FastAPI + Evolution API (Electrosoft)\n\n## Arquitetura (para o frontend)\n\n```\nWhatsApp  →  Electrosoft (Evolution)  →  POST /webhook  →  FastAPI (:8000)\n                                                            → SQLite (contatos.db)\n                                                            → WS /ws  →  Frontend\n```\n\n| Cenário | Quem chama quem |\n|---|---|\n| **Receber mensagem** | Electrosoft faz `POST /webhook` → backend guarda no SQLite → backend difunde via **`WS /ws`** pro frontend |\n| **Enviar mensagem** | Frontend chama `POST /api/enviar` → backend chama Evolution `sendText` |\n| **Ver contactos/mensagens** | Frontend chama `GET /api/contatos`, `GET /api/conversas`, etc. |\n\n### Webhook vs WebSocket\n* **Webhook** (`POST /webhook`): a Electrosoft empurra pra **ti** quando chega mensagem ou muda conexão. Não é o frontend que chama.\n* **WebSocket** (`WS /ws`): o **frontend conecta** em ti (`ws://.../ws`) e recebe ao vivo `messages.upsert` e `connection.update`.\n\n### Fluxo receber (passo a passo)\n1. Mensagem chega no WhatsApp → Electrosoft faz `POST /webhook {event:\"messages.upsert\"}`.\n2. Backend guarda contacto + mensagem no SQLite.\n3. Backend envia via WS: `{\"event\":\"messages.upsert\",\"contato\":{...},\"mensagem\":{...}}`.\n4. Frontend mostra na lista.\n\n### Fluxo enviar (passo a passo)\n1. Frontend: `POST /api/enviar {numero, texto}`.\n2. Backend: Evolution `POST /message/sendText`.\n3. WhatsApp recebe.\n\n## Exemplo frontend (JS)\n\n```js\nconst ws = new WebSocket(\"ws://localhost:8000/ws\");\nws.onmessage = (e) =\u003E {\n  const d = JSON.parse(e.data);\n  if (d.event === \"messages.upsert\") atualizarLista(d.contato, d.mensagem);\n};\n```\n\n## Endpoints base\n\n* `GET /` — estado + `ligadosWS`\n* `POST /webhook` — só a Electrosoft chama (não testar no browser)\n* `WS /ws` — frontend conecta aqui (não aparece nos testes HTTP)\n* `POST /api/enviar`, `POST /api/enviar-media`\n* `GET|POST|PUT|DELETE /api/contatos`, `GET /api/conversas`\n* `GET /api/mensagens/recebidas`, `GET /api/mensagens` (Evolution)\n",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhook": {
+      "post": {
+        "summary": "Webhook",
+        "operationId": "webhook_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enviar": {
+      "post": {
+        "summary": "Enviar",
+        "operationId": "enviar_api_enviar_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnviarRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enviar-media": {
+      "post": {
+        "summary": "Enviar Media",
+        "operationId": "enviar_media_api_enviar_media_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnviarMediaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enviar-cloudinary": {
+      "post": {
+        "summary": "Enviar Cloudinary",
+        "operationId": "enviar_cloudinary_api_enviar_cloudinary_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_enviar_cloudinary_api_enviar_cloudinary_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversas": {
+      "get": {
+        "summary": "Conversas",
+        "operationId": "conversas_api_conversas_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mensagens/recebidas": {
+      "get": {
+        "summary": "Mensagens Recebidas",
+        "operationId": "mensagens_recebidas_api_mensagens_recebidas_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mensagens/recebidas/{numero}": {
+      "get": {
+        "summary": "Mensagens Recebidas Por Numero",
+        "operationId": "mensagens_recebidas_por_numero_api_mensagens_recebidas__numero__get",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Numero"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mensagens": {
+      "get": {
+        "summary": "Mensagens",
+        "operationId": "mensagens_api_mensagens_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mensagens/{numero}": {
+      "get": {
+        "summary": "Mensagens Por Numero",
+        "operationId": "mensagens_por_numero_api_mensagens__numero__get",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Numero"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contatos": {
+      "get": {
+        "summary": "Listar",
+        "operationId": "listar_api_contatos_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Criar",
+        "operationId": "criar_api_contatos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContatoCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contatos/{numero}": {
+      "get": {
+        "summary": "Selecionar",
+        "operationId": "selecionar_api_contatos__numero__get",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Numero"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Alterar",
+        "operationId": "alterar_api_contatos__numero__put",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Numero"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContatoUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Apagar",
+        "operationId": "apagar_api_contatos__numero__delete",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Numero"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contatos/{numero}/mensagens": {
+      "get": {
+        "summary": "Mensagens Do Contato",
+        "operationId": "mensagens_do_contato_api_contatos__numero__mensagens_get",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Numero"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_enviar_cloudinary_api_enviar_cloudinary_post": {
+        "properties": {
+          "numero": {
+            "type": "string",
+            "title": "Numero"
+          },
+          "ficheiro": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Ficheiro"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          }
+        },
+        "type": "object",
+        "required": [
+          "numero",
+          "ficheiro"
+        ],
+        "title": "Body_enviar_cloudinary_api_enviar_cloudinary_post"
+      },
+      "ContatoCreate": {
+        "properties": {
+          "nome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nome"
+          },
+          "numero": {
+            "type": "string",
+            "title": "Numero"
+          }
+        },
+        "type": "object",
+        "required": [
+          "numero"
+        ],
+        "title": "ContatoCreate"
+      },
+      "ContatoUpdate": {
+        "properties": {
+          "nome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nome"
+          }
+        },
+        "type": "object",
+        "title": "ContatoUpdate"
+      },
+      "EnviarMediaRequest": {
+        "properties": {
+          "numero": {
+            "type": "string",
+            "title": "Numero"
+          },
+          "media": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "mediatype": {
+            "type": "string",
+            "title": "Mediatype",
+            "default": "document"
+          },
+          "mimetype": {
+            "type": "string",
+            "title": "Mimetype",
+            "default": "application/pdf"
+          },
+          "fileName": {
+            "type": "string",
+            "title": "Filename",
+            "default": "documento.pdf"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          }
+        },
+        "type": "object",
+        "required": [
+          "numero"
+        ],
+        "title": "EnviarMediaRequest"
+      },
+      "EnviarRequest": {
+        "properties": {
+          "numero": {
+            "type": "string",
+            "title": "Numero"
+          },
+          "texto": {
+            "type": "string",
+            "title": "Texto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "numero",
+          "texto"
+        ],
+        "title": "EnviarRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

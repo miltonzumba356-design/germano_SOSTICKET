@@ -25,7 +25,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://suport-api-1.onrender.com',
+        target: 'https://suportapi-production-e15c.up.railway.app',
         changeOrigin: true,
         secure: false,
       }
@@ -83,7 +83,7 @@ export default defineConfig({
         // API sempre via rede (Network First)
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/suport-api-1\.onrender\.com\/.*/i,
+            urlPattern: /^https:\/\/suportapi-production-e15c\.up\.railway\.app\/api\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',

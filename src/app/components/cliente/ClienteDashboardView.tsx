@@ -6,7 +6,7 @@ import {
 import type { Intervencao, Contrato } from '../../types/api';
 import { formatarHoras } from '../../utils/formatters';
 import { ConversaListItem } from './ConversaListItem';
-import { WidgetSkeleton } from './Skeletons';
+import { ConversaSkeleton, WidgetSkeleton } from './Skeletons';
 import { useClienteChrome } from './ClienteShell';
 import { definirIntervencaoSelecionada, sinalizarNovoAtendimento, statusStyle } from './helpers';
 

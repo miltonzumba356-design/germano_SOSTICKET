@@ -7,9 +7,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCronometro } from '../contexts/CronometroContext';
 import { formatarHoras } from '../utils/formatters';
 import { ClienteIntervencoesView } from './cliente/ClienteIntervencoesView';
+import { IntervencaoWhatsApp } from './IntervencaoWhatsApp';
+import { WhatsAppInbox } from './WhatsAppInbox';
 import {
   Search,
   Plus,
+  Ticket,
   User,
   Clock,
   AlertCircle,
@@ -141,6 +144,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const [exibirModalDetalhes, setExibirModalDetalhes] = useState(false);
   const [intervencaoDetalhe, setIntervencaoDetalhe] = useState<Intervencao | null>(null);
   const [novoComentario, setNovoComentario] = useState('');
+  const [abaChat, setAbaChat] = useState<'whatsapp' | 'ticket'>('whatsapp');
+  const [abaPrincipal, setAbaPrincipal] = useState<'tickets' | 'whatsapp'>('tickets');
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
   const [visualizadorAnexo, setVisualizadorAnexo] = useState<{ url: string; nome: string; lista: { url: string; nome: string }[]; indice: number } | null>(null);
   const [exibirModalAtribuir, setExibirModalAtribuir] = useState(false);
@@ -932,8 +937,33 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         </div>
       )}
 
-      {/* Lista de Intervenções */}
+      {/* Separadores: Tickets | WhatsApp (admin/técnico) */}
+      <div className="inline-flex rounded-xl bg-white border border-gray-100 shadow-sm p-1 text-sm font-bold">
+        <button
+          type="button"
+          onClick={() => setAbaPrincipal('tickets')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${abaPrincipal === 'tickets' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+        >
+          <Ticket className="w-4 h-4" /> Tickets
+        </button>
+        <button
+          type="button"
+          onClick={() => setAbaPrincipal('whatsapp')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${abaPrincipal === 'whatsapp' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+        >
+          <MessageSquare className="w-4 h-4" /> WhatsApp
+        </button>
+      </div>
 
+      {abaPrincipal === 'whatsapp' && (
+        <WhatsAppInbox
+          podeCriarTicket={isAdmin}
+          onAbrirTicket={(id) => handleVerDetalhes(id)}
+          onTicketCriado={() => carregarIntervencoes(true)}
+        />
+      )}
+
+      {abaPrincipal === 'tickets' && (<>
       {/* Filtros Avançados */}
       <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row gap-4">
@@ -1188,6 +1218,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
           </div>
         </div>
       )}
+      </>)}
 
       {/* Modal Detalhes Intervenção */}
       {exibirModalDetalhes && intervencaoDetalhe && (
@@ -1221,11 +1252,33 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
 
                   {/* Comentários */}
                   <div className="space-y-4">
-                    <h4 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                      <MessageSquare className="w-5 h-5 text-theme-primary" />
-                      Comunicação / Chat
-                    </h4>
-                    
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h4 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                        <MessageSquare className="w-5 h-5 text-theme-primary" />
+                        Comunicação / Chat
+                      </h4>
+                      <div className="inline-flex rounded-xl bg-gray-100 p-1 text-xs font-bold">
+                        <button
+                          type="button"
+                          onClick={() => setAbaChat('whatsapp')}
+                          className={`px-3 py-1.5 rounded-lg transition-colors ${abaChat === 'whatsapp' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+                        >
+                          WhatsApp
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAbaChat('ticket')}
+                          className={`px-3 py-1.5 rounded-lg transition-colors ${abaChat === 'ticket' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+                        >
+                          Comentários do ticket ({intervencaoDetalhe.comentarios?.length || 0})
+                        </button>
+                      </div>
+                    </div>
+
+                    {abaChat === 'whatsapp' ? (
+                      <IntervencaoWhatsApp intervencao={intervencaoDetalhe} clientes={clientes} />
+                    ) : (
+                    <>
                     <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                       {!intervencaoDetalhe.comentarios || intervencaoDetalhe.comentarios.length === 0 ? (
                         <p className="text-sm text-gray-500 italic py-4">Nenhuma mensagem trocada ainda.</p>
@@ -1258,6 +1311,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                         <ArrowRight className="w-6 h-6" />
                       </button>
                     </form>
+                    </>
+                    )}
                   </div>
                 </div>
 
