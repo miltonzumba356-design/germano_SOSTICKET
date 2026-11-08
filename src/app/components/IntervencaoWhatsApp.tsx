@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCheck, FileText, Loader2, Paperclip, RefreshCw, Send, Wifi, WifiOff, X } from 'lucide-react';
+import { AlertCircle, Bookmark, CheckCheck, FileText, Loader2, Paperclip, RefreshCw, Send, Wifi, WifiOff, X } from 'lucide-react';
 import type { Intervencao } from '../types/api';
-import { clientesService } from '../services/api';
+import { clientesService, respostasRapidasService } from '../services/api';
 import {
   Mensagem,
   WhatsAppApiError,
@@ -128,6 +128,8 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
   const [anexo, setAnexo] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [erroEnvio, setErroEnvio] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<{ titulo: string; texto: string }[]>([]);
+  const [mostrarTemplates, setMostrarTemplates] = useState(false);
 
   const fimRef = useRef<HTMLDivElement>(null);
   const ficheiroRef = useRef<HTMLInputElement>(null);
@@ -301,10 +303,27 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
             </button>
           </div>
         )}
+        {mostrarTemplates && (
+          <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+            <p className="px-3 py-2 text-[11px] font-black text-gray-400 uppercase">Respostas rápidas</p>
+            {templates.length ? templates.map((t, i) => (
+              <button key={i} type="button" onClick={() => { setTexto(t.texto); setMostrarTemplates(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 border-t border-gray-50">
+                <span className="font-bold text-xs text-emerald-700">{t.titulo}</span>
+                <span className="block text-xs text-gray-500 truncate">{t.texto}</span>
+              </button>
+            )) : <p className="px-3 pb-3 text-xs text-gray-500">Sem templates (cria em Respostas Rápidas)</p>}
+          </div>
+        )}
         <div className="flex items-end gap-2">
           <input ref={ficheiroRef} type="file" className="hidden" onChange={(e) => setAnexo(e.target.files?.[0] || null)} />
           <button type="button" onClick={() => ficheiroRef.current?.click()} className="p-3 rounded-xl hover:bg-gray-100 text-gray-500" aria-label="Anexar ficheiro">
             <Paperclip className="w-5 h-5" />
+          </button>
+          <button type="button" title="Respostas rápidas"
+            onClick={async () => { if (!mostrarTemplates) { try { const r: any = await respostasRapidasService.listar(); setTemplates((Array.isArray(r) ? r : (r?.results || r?.data || [])) as any); } catch { setTemplates([]); } } setMostrarTemplates((v) => !v); }}
+            className="p-3 rounded-xl hover:bg-gray-100 text-gray-500" aria-label="Respostas rápidas">
+            <Bookmark className="w-5 h-5" />
           </button>
           <textarea
             value={texto}

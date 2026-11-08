@@ -523,3 +523,7 @@ export const relatoriosService = {
   intervencoes: () => fetchAPI<any>('/relatorios/intervencoes'),
   financeiro: () => fetchAPI<any>('/relatorios/financeiro'),
 };
+
+export const respostasRapidasService = {
+  listar: () => list<any>('/respostas-rapidas?ativa=true'),
+};
