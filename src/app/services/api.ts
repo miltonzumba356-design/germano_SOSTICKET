@@ -542,4 +542,5 @@ export const fiscalService = {
   documentos: () => list<any>('/fiscal/documentos'),
   alertas: () => fetchAPI<any>('/fiscal/calendario/alertas'),
   resumo: () => fetchAPI<any>('/fiscal/calendario/resumo'),
+  alertarAdmin: () => create<any>('/fiscal/calendario/alertar', {}),
 };

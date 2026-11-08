@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Building2, CalendarDays, Loader2, Plus, X } from 'lucide-react';
+import { AlertTriangle, Building2, CalendarDays, Loader2, Plus, Send, X } from 'lucide-react';
 import { clientesService, empresasService, fiscalService, tecnicosService } from '../services/api';
+
+function listaDe(r: any): any[] {
+  const l = Array.isArray(r) ? r : (r?.results || r?.data || []);
+  return Array.isArray(l) ? l : [];
+}
 
 export function CalendarioFiscal() {
   const [alertas, setAlertas] = useState<any>({ vencidas: [], proximas: [], pendentes: 0 });
@@ -12,32 +17,23 @@ export function CalendarioFiscal() {
   const [busca, setBusca] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [novo, setNovo] = useState(false);
+  const [novaCat, setNovaCat] = useState(false);
   const [form, setForm] = useState({ cliente: '', categoria: '', periodicidade: 'mensal', data_vencimento: '', responsavel: '' });
+  const [catForm, setCatForm] = useState({ nome: '', dias_alerta: 5 });
+  const [mes, setMes] = useState(() => new Date());
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const a = await fiscalService.alertas();
+      const a: any = await fiscalService.alertas();
       setAlertas(a?.data || a || { vencidas: [], proximas: [], pendentes: 0 });
-      const o: any = await fiscalService.obrigacoes();
-      const lista = Array.isArray(o) ? o : (o?.results || o?.data || []);
-      setObrigacoes(Array.isArray(lista) ? lista : []);
-      try {
-        const cats: any = await fiscalService.categorias();
-        setCategorias(Array.isArray(cats) ? cats : (cats?.results || cats?.data || []));
-      } catch { setCategorias([]); }
-      try {
-        const cl: any = await clientesService.listar({ limit: 200 } as any);
-        setClientes(Array.isArray(cl) ? cl : (cl?.results || cl?.data || []));
-      } catch { setClientes([]); }
-      try {
-        const te: any = await tecnicosService.listar({ limit: 100 } as any);
-        setTecnicos(Array.isArray(te) ? te : (te?.results || te?.data || []));
-      } catch { setTecnicos([]); }
+      setObrigacoes(listaDe(await fiscalService.obrigacoes()));
+      try { setCategorias(listaDe(await fiscalService.categorias())); } catch { setCategorias([]); }
+      try { setClientes(listaDe(await clientesService.listar({ limit: 100 } as any))); } catch { setClientes([]); }
+      try { setTecnicos(listaDe(await tecnicosService.listar({ limit: 100 } as any))); } catch { setTecnicos([]); }
       try {
         const em: any = await empresasService.listar({ limit: 100 } as any);
-        const le = Array.isArray(em) ? em : (em?.results || em?.data || []);
-        setEmpresasMap(Object.fromEntries((Array.isArray(le) ? le : []).map((e: any) => [e.id, e])));
+        setEmpresasMap(Object.fromEntries(listaDe(em).map((e: any) => [e.id, e])));
       } catch { /* sem fotos */ }
     } catch { /* mantém */ }
     setCarregando(false);
@@ -61,9 +57,32 @@ export function CalendarioFiscal() {
     carregar();
   };
 
+  const criarCategoria = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await fiscalService.criarCategoria(catForm);
+    setNovaCat(false);
+    setCatForm({ nome: '', dias_alerta: 5 });
+    carregar();
+  };
+
+  const alertar = async () => {
+    const r: any = await fiscalService.alertarAdmin();
+    alert(`Alertas enviados: ${r?.data?.enviados || 0}`);
+  };
+
+  // grade do mês
+  const ano = mes.getFullYear(), mesIdx = mes.getMonth();
+  const dias = new Date(ano, mesIdx + 1, 0).getDate();
+  const primeiro = new Date(ano, mesIdx, 1).getDay();
+  const porDia: Record<number, any[]> = {};
+  filtradas.forEach((o) => {
+    const d = new Date(o.data_vencimento + 'T00:00:00');
+    if (d.getFullYear() === ano && d.getMonth() === mesIdx) (porDia[d.getDate()] ||= []).push(o);
+  });
+
   return (
     <div className="space-y-6 pb-12">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <CalendarDays className="w-7 h-7 text-indigo-600" />
           <div>
@@ -71,29 +90,47 @@ export function CalendarioFiscal() {
             <p className="text-sm text-gray-500">Obrigações, prazos e alertas por cliente</p>
           </div>
         </div>
-        <button onClick={() => setNovo(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold text-sm">
-          <Plus className="w-4 h-4" /> Nova Obrigação
-        </button>
+        <div className="flex gap-2">
+          <button onClick={alertar} className="flex items-center gap-2 px-3 py-2 bg-amber-500 text-white font-bold text-sm rounded-lg hover:bg-amber-600"><Send className="w-4 h-4" /> Alertar admin (5 dias)</button>
+          <button onClick={() => setNovaCat(true)} className="flex items-center gap-2 px-3 py-2 bg-white border font-bold text-sm rounded-lg"><Plus className="w-4 h-4" /> Categoria</button>
+          <button onClick={() => setNovo(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold text-sm"><Plus className="w-4 h-4" /> Nova Obrigação</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-red-50 border border-red-100 rounded-2xl p-5">
-          <p className="text-xs font-black text-red-500 uppercase flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Vencidas</p>
-          <p className="text-3xl font-black text-red-700">{alertas.vencidas?.length || 0}</p>
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-5"><p className="text-xs font-black text-red-500 uppercase flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Vencidas</p><p className="text-3xl font-black text-red-700">{alertas.vencidas?.length || 0}</p></div>
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5"><p className="text-xs font-black text-amber-500 uppercase">Próximas</p><p className="text-3xl font-black text-amber-700">{alertas.proximas?.length || 0}</p></div>
+        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5"><p className="text-xs font-black text-indigo-500 uppercase">Pendentes</p><p className="text-3xl font-black text-indigo-700">{alertas.pendentes || 0}</p></div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-black text-gray-800">{mes.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })}</h3>
+          <div className="flex gap-1">
+            <button onClick={() => setMes(new Date(ano, mesIdx - 1, 1))} className="px-3 py-1.5 bg-gray-50 rounded-lg text-sm font-bold">‹</button>
+            <button onClick={() => setMes(new Date(ano, mesIdx + 1, 1))} className="px-3 py-1.5 bg-gray-50 rounded-lg text-sm font-bold">›</button>
+          </div>
         </div>
-        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5">
-          <p className="text-xs font-black text-amber-500 uppercase">Próximas</p>
-          <p className="text-3xl font-black text-amber-700">{alertas.proximas?.length || 0}</p>
-        </div>
-        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5">
-          <p className="text-xs font-black text-indigo-500 uppercase">Pendentes</p>
-          <p className="text-3xl font-black text-indigo-700">{alertas.pendentes || 0}</p>
+        <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-400 font-bold mb-1">{['D','S','T','Q','Q','S','S'].map((d, i) => <div key={i}>{d}</div>)}</div>
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: primeiro }).map((_, i) => <div key={'e'+i} />)}
+          {Array.from({ length: dias }).map((_, i) => {
+            const dia = i + 1;
+            const itens = porDia[dia] || [];
+            const hoje = new Date().getDate() === dia && new Date().getMonth() === mesIdx && new Date().getFullYear() === ano;
+            return (
+              <div key={dia} className={`min-h-[56px] border rounded-lg p-1 text-left ${hoje ? 'border-indigo-500 bg-indigo-50' : 'border-gray-100'}`}>
+                <span className={`text-xs font-bold ${hoje ? 'text-indigo-700' : 'text-gray-500'}`}>{dia}</span>
+                {itens.map((o) => (<span key={o.id} className={`block truncate text-[10px] px-1 rounded ${o.vencida ? 'bg-red-100 text-red-700' : 'bg-indigo-100 text-indigo-700'}`} title={o.categoria_nome}>{o.categoria_nome}</span>))}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-gray-100">
-          <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pesquisar por cliente, categoria ou texto..."
+          <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pesquisar..."
             className="w-full px-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
         </div>
         {carregando ? (
@@ -105,12 +142,8 @@ export function CalendarioFiscal() {
             </thead>
             <tbody>
               {filtradas.map((o: any) => {
-                const cli = clientes.find((c: any) => {
-                  const eid = typeof c.empresa === 'string' ? c.empresa : c.empresa?.id;
-                  return c.nome === o.cliente_nome;
-                }) as any;
-                const emp = cli?.empresa && typeof cli.empresa === 'object' ? cli.empresa : empresasMap[cli?.empresa] || null;
-                const foto = (emp as any)?.avatar_url as string | undefined;
+                const emp = empresasMap[clientes.find((c: any) => c.nome === o.cliente_nome)?.empresa?.id] as any;
+                const foto = (emp?.avatar_url || clientes.find((c: any) => c.nome === o.cliente_nome)?.empresa?.avatar_url) as string | undefined;
                 return (
                   <tr key={o.id} className="border-t border-gray-100">
                     <td className="px-4 py-3">
@@ -131,6 +164,17 @@ export function CalendarioFiscal() {
           </table>
         )}
       </div>
+
+      {novaCat && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <form onSubmit={criarCategoria} className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3">
+            <div className="flex items-center justify-between"><h3 className="font-bold">Nova Categoria</h3><button type="button" onClick={() => setNovaCat(false)} className="p-1 hover:bg-gray-100 rounded-full"><X className="w-5 h-5" /></button></div>
+            <input required value={catForm.nome} onChange={(e) => setCatForm({ ...catForm, nome: e.target.value })} placeholder="Nome (ex: IVA)" className="w-full px-3 py-2 border rounded-lg text-sm" />
+            <input type="number" value={catForm.dias_alerta} onChange={(e) => setCatForm({ ...catForm, dias_alerta: Number(e.target.value) })} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Dias de alerta" />
+            <button className="w-full py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-sm">Salvar</button>
+          </form>
+        </div>
+      )}
 
       {novo && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">

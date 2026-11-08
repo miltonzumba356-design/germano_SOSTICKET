@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Loader2, Search } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Search, X } from 'lucide-react';
 import { Cliente, Empresa } from '../types/api';
 import { clientesService, empresasService } from '../services/api';
 
@@ -19,6 +19,8 @@ export function EmpresaClientes({
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busca, setBusca] = useState('');
   const [carregando, setCarregando] = useState(true);
+  const [editando, setEditando] = useState(false);
+  const [form, setForm] = useState({ nome: '', Email_empresa: '', telefone: '', nif: '', endereco: '', status: 'activo' });
 
   const carregar = useCallback(async () => {
     setCarregando(true);

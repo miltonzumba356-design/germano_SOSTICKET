@@ -18,6 +18,7 @@ const formInicial = {
   telefone: '',
   nif: '',
   endereco: '',
+  regime: 'geral' as string,
   status: 'activo' as 'activo' | 'inactivo',
 };
 
@@ -165,6 +166,7 @@ export function Empresas({ onNavigate }: { onNavigate?: (pagina: string) => void
       telefone: empresa.telefone || '',
       nif: empresa.nif || '',
       endereco: empresa.endereco || '',
+      regime: (empresa as any).regime || 'geral',
       status: (empresa.status as 'activo' | 'inactivo') || 'activo',
     });
     const postos = empresa.postos && typeof empresa.postos === 'object'
@@ -305,6 +307,20 @@ export function Empresas({ onNavigate }: { onNavigate?: (pagina: string) => void
                 <Input label="Nome da empresa *" name="nome" value={formData.nome} onChange={setFormData} required />
                 <Input label="E-mail da empresa *" name="Email_empresa" type="email" value={formData.Email_empresa} onChange={setFormData} required />
                 <Input label="NIF *" name="nif" value={formData.nif} onChange={setFormData} required />
+                <div className="space-y-1">
+                  <label className="text-sm font-bold text-gray-700">Regime *</label>
+                  <select
+                    required
+                    value={formData.regime}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, regime: e.target.value }))}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                  >
+                    <option value="geral">Geral</option>
+                    <option value="simplificado">Simplificado</option>
+                    <option value="exclusivo">Exclusivo</option>
+                    <option value="outros">Outros</option>
+                  </select>
+                </div>
                 <div className="md:col-span-2 flex items-center gap-4">
                   <input ref={fotoRef} type="file" accept="image/*" className="hidden"
                     onChange={async (e) => {
