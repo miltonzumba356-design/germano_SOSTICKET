@@ -382,13 +382,21 @@ export const whatsappService = {
     });
   },
 
-  /** POST /enviar-cloudinary — multipart: numero, ficheiro, caption? */
+  /** POST /enviar-cloudinary - multipart: numero, ficheiro, caption? */
   enviarCloudinary(numero: string, ficheiro: File, caption?: string | null) {
     const form = new FormData();
     form.append('numero', limparNumero(numero));
     form.append('ficheiro', ficheiro, ficheiro.name);
     if (caption) form.append('caption', caption);
     return pedido('/enviar-cloudinary', { method: 'POST', body: form });
+  },
+
+  /** POST /enviar-audio - nota de voz gravada no browser (multipart) */
+  enviarAudio(numero: string, ficheiro: File) {
+    const form = new FormData();
+    form.append('numero', limparNumero(numero));
+    form.append('ficheiro', ficheiro, ficheiro.name);
+    return pedido('/enviar-audio', { method: 'POST', body: form });
   },
 
   /** GET /conversas */

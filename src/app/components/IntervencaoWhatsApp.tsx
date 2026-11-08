@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Bookmark, CheckCheck, FileText, Loader2, Paperclip, RefreshCw, Send, Wifi, WifiOff, X } from 'lucide-react';
+import { AlertCircle, Bookmark, CheckCheck, FileText, Loader2, Mic, Paperclip, RefreshCw, Send, Square, Wifi, WifiOff, X } from 'lucide-react';
 import type { Intervencao } from '../types/api';
 import { clientesService, respostasRapidasService } from '../services/api';
 import {
@@ -130,9 +130,15 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
   const [erroEnvio, setErroEnvio] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ titulo: string; texto: string }[]>([]);
   const [mostrarTemplates, setMostrarTemplates] = useState(false);
+  const [gravando, setGravando] = useState(false);
+  const [segundosGravacao, setSegundosGravacao] = useState(0);
 
   const fimRef = useRef<HTMLDivElement>(null);
   const ficheiroRef = useRef<HTMLInputElement>(null);
+  const gravadorRef = useRef<MediaRecorder | null>(null);
+  const pedacosRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const cronometroRef = useRef<number | null>(null);
   const numeroRef = useRef('');
   numeroRef.current = numero;
 
@@ -193,6 +199,92 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [mensagens]);
+
+  const pararCronometro = useCallback(() => {
+    if (cronometroRef.current !== null) {
+      window.clearInterval(cronometroRef.current);
+      cronometroRef.current = null;
+    }
+    setSegundosGravacao(0);
+  }, []);
+
+  const iniciarGravacao = async () => {
+    if (gravando || enviando || !numero) return;
+    setErroEnvio(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const candidatos = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'];
+      const mime = candidatos.find((t) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
+      const gravador = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      pedacosRef.current = [];
+
+      gravador.ondataavailable = (ev) => {
+        if (ev.data.size > 0) pedacosRef.current.push(ev.data);
+      };
+
+      gravador.onstop = async () => {
+        const tipo = gravador.mimeType || mime || 'audio/webm';
+        const blob = new Blob(pedacosRef.current, { type: tipo });
+        pedacosRef.current = [];
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+
+        if (blob.size < 1200) return; // gravação demasiado curta
+
+        const extensao = tipo.includes('ogg') ? 'ogg' : 'webm';
+        const ficheiro = new File([blob], `audio-${Date.now()}.${extensao}`, { type: tipo });
+        setEnviando(true);
+        try {
+          const resp: any = await whatsappService.enviarAudio(numero, ficheiro);
+          const urlAudio = resp?.cloudinaryUrl || resp?.data?.cloudinaryUrl || null;
+          setMensagens((lista) => ordenar([...lista, {
+            id: `local-${Date.now()}`,
+            numero,
+            texto: '',
+            fromMe: true,
+            data: new Date().toISOString(),
+            tipo: 'audio',
+            mediaUrl: urlAudio,
+            raw: null,
+          } as Mensagem]));
+        } catch (erroAudio) {
+          setErroEnvio(mensagemErro(erroAudio, 'Falha ao enviar o áudio.'));
+        } finally {
+          setEnviando(false);
+        }
+      };
+
+      gravador.start();
+      gravadorRef.current = gravador;
+      setGravando(true);
+      setSegundosGravacao(0);
+      cronometroRef.current = window.setInterval(() => setSegundosGravacao((s) => s + 1), 1000);
+    } catch {
+      setErroEnvio('Não foi possível aceder ao microfone. Verifica as permissões do browser.');
+    }
+  };
+
+  const pararGravacao = (cancelar = false) => {
+    pararCronometro();
+    setGravando(false);
+    const gravador = gravadorRef.current;
+    gravadorRef.current = null;
+    if (!gravador) return;
+    if (cancelar) {
+      gravador.onstop = () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        pedacosRef.current = [];
+      };
+    }
+    if (gravador.state !== 'inactive') gravador.stop();
+  };
+
+  useEffect(() => () => {
+    if (cronometroRef.current !== null) window.clearInterval(cronometroRef.current);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
 
   const enviar = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -329,21 +421,43 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
           <button type="button" onClick={() => ficheiroRef.current?.click()} className="p-3 rounded-xl hover:bg-gray-100 text-gray-500" aria-label="Anexar ficheiro">
             <Paperclip className="w-5 h-5" />
           </button>
+          <button
+            type="button"
+            onClick={() => (gravando ? pararGravacao(false) : iniciarGravacao())}
+            disabled={enviando || !numero}
+            className={`p-3 rounded-xl disabled:opacity-50 ${gravando ? 'bg-red-600 text-white hover:bg-red-700' : 'hover:bg-gray-100 text-gray-500'}`}
+            aria-label={gravando ? 'Parar e enviar áudio' : 'Gravar áudio'}
+            title={gravando ? 'Parar e enviar áudio' : 'Gravar áudio'}
+          >
+            {gravando ? <Square className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          </button>
           <button type="button" title="Respostas rápidas"
             onClick={async () => { if (!mostrarTemplates) { try { const r: any = await respostasRapidasService.listar(); setTemplates((Array.isArray(r) ? r : (r?.results || r?.data || [])) as any); } catch { setTemplates([]); } } setMostrarTemplates((v) => !v); }}
             className="p-3 rounded-xl hover:bg-gray-100 text-gray-500" aria-label="Respostas rápidas">
             <Bookmark className="w-5 h-5" />
           </button>
-          <textarea
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
-            }}
-            rows={1}
-            placeholder={anexo ? 'Legenda (opcional)' : 'Mensagem WhatsApp...'}
-            className="flex-1 resize-none max-h-32 px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-0 text-sm"
-          />
+          {gravando ? (
+            <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-red-50 border-2 border-red-200 rounded-xl">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
+              <span className="text-sm font-bold text-red-700">
+                A gravar {String(Math.floor(segundosGravacao / 60)).padStart(2, '0')}:{String(segundosGravacao % 60).padStart(2, '0')}
+              </span>
+              <button type="button" onClick={() => pararGravacao(true)} className="ml-auto text-xs font-bold text-gray-600 hover:text-gray-900">
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <textarea
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
+              }}
+              rows={1}
+              placeholder={anexo ? 'Legenda (opcional)' : 'Mensagem WhatsApp...'}
+              className="flex-1 resize-none max-h-32 px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-0 text-sm"
+            />
+          )}
           <button
             type="submit"
             disabled={enviando || (!texto.trim() && !anexo)}
