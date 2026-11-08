@@ -11,6 +11,7 @@ import {
   Monitor,
   Landmark,
   Calculator,
+  MessageCircle,
   LucideIcon
 } from 'lucide-react';
 
@@ -41,6 +42,11 @@ export const adminMenu: MenuItem[] = [
     id: 'intervencoes',
     label: 'Intervenções',
     icon: Ticket,
+  },
+  {
+    id: 'whatsapp',
+    label: 'WhatsApp',
+    icon: MessageCircle,
   },
   {
     id: 'tecnicos',

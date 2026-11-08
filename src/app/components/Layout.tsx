@@ -17,6 +17,7 @@ import {
   Calendar,
   Clock,
   Building2,
+  MessageCircle,
   ShieldOff,
 } from 'lucide-react';
 
@@ -86,6 +87,7 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
       return [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'intervencoes', label: 'Minhas Intervenções', icon: Ticket },
+        { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
         { id: 'horas', label: 'Registo de Horas', icon: Clock },
         { id: 'calendario', label: 'Calendário', icon: Calendar },
         { id: 'perfil', label: 'Meu Perfil', icon: UserCog },
@@ -261,7 +263,7 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
           <nav className="p-4 space-y-2">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isAtivo = paginaAtual === item.id;
+              const isAtivo = paginaAtual === item.id || paginaAtual.startsWith(`${item.id}_`);
 
               return (
                 <button
