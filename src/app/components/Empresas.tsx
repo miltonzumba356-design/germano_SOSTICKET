@@ -21,7 +21,7 @@ const formInicial = {
   status: 'activo' as 'activo' | 'inactivo',
 };
 
-export function Empresas() {
+export function Empresas({ onNavigate }: { onNavigate?: (pagina: string) => void }) {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [busca, setBusca] = useState('');
   const [carregando, setCarregando] = useState(true);
@@ -413,12 +413,19 @@ export function Empresas() {
                 ) : utilizadores.length ? (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {utilizadores.map((u: any) => (
-                      <div key={u.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between text-sm">
-                        <div>
-                          <p className="font-bold text-gray-800">{u.nome}</p>
-                          <p className="text-xs text-gray-500">{u.email || ''} · {u.telefone || 'sem telefone'}</p>
+                      <div key={u.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-bold text-gray-800 truncate">{u.nome}</p>
+                          <p className="text-xs text-gray-500 truncate">{u.email || ''} · {u.telefone || 'sem telefone'}</p>
                         </div>
-                        <span className="text-xs font-bold text-gray-500 uppercase">{u.perfil || ''}</span>
+                        <div className="flex gap-1.5 flex-shrink-0">
+                          <button onClick={() => onNavigate?.('clientes')} className="px-2.5 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded-lg flex items-center gap-1">
+                            <Pencil className="w-3.5 h-3.5" /> Editar
+                          </button>
+                          <button onClick={() => onNavigate?.('intervencoes')} className="px-2.5 py-1.5 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                            Tickets
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

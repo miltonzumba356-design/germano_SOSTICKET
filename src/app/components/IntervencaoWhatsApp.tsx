@@ -189,10 +189,12 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
     if (!numero || enviando || (!conteudo && !anexo)) return;
     setEnviando(true);
     setErroEnvio(null);
+    let urlFoto: string | null = null;
     try {
       if (anexo) {
         try {
-          await whatsappService.enviarCloudinary(numero, anexo, conteudo || null);
+          const resp: any = await whatsappService.enviarCloudinary(numero, anexo, conteudo || null);
+          urlFoto = resp?.cloudinaryUrl || resp?.data?.cloudinaryUrl || null;
         } catch (erroCloud) {
           if (erroCloud instanceof WhatsAppApiError && erroCloud.status === 0) throw erroCloud;
           await whatsappService.enviarMedia({
@@ -210,12 +212,13 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
       setMensagens((lista) => ordenar([...lista, {
         id: `local-${Date.now()}`,
         numero,
-        texto: anexo ? `📎 ${anexo.name}${conteudo ? `\n${conteudo}` : ''}` : conteudo,
+        texto: anexo ? (conteudo || '') : conteudo,
         fromMe: true,
         data: new Date().toISOString(),
         tipo: anexo ? mediatypeDe(anexo.type || '') : 'text',
+        mediaUrl: urlFoto,
         raw: null,
-      }]));
+      } as Mensagem]));
       setTexto('');
       setAnexo(null);
       if (ficheiroRef.current) ficheiroRef.current.value = '';

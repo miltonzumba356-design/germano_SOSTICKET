@@ -54,7 +54,7 @@ function AppContent() {
     }
 
     if (paginaAtual === 'empresas' || paginaAtual.startsWith('empresas_')) {
-      return <Empresas />;
+      return <Empresas onNavigate={setPaginaAtual} />;
     }
 
     // Intervenções handles
