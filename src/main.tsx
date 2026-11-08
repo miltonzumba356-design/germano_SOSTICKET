@@ -28,4 +28,18 @@
       recarregando = true;
       window.location.reload();
     });
+
+    // Procura builds novos enquanto a app esta aberta (senao a PWA fica dias com JS antigo)
+    const procurarActualizacao = async () => {
+      try {
+        const registo = await navigator.serviceWorker.getRegistration();
+        await registo?.update();
+      } catch {
+        // sem rede / SW indisponivel - tenta na proxima
+      }
+    };
+    window.setInterval(procurarActualizacao, 60_000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') procurarActualizacao();
+    });
   }
