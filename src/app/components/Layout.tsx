@@ -87,7 +87,7 @@ export function Layout({ children, paginaAtual, onNavigate }: LayoutProps) {
       return [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'intervencoes', label: 'Minhas Intervenções', icon: Ticket },
-        { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+        { id: 'fiscal', label: 'Calendário Fiscal', icon: CalendarDays },
         { id: 'horas', label: 'Registo de Horas', icon: Clock },
         { id: 'calendario', label: 'Calendário', icon: Calendar },
         { id: 'perfil', label: 'Meu Perfil', icon: UserCog },

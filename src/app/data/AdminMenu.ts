@@ -45,11 +45,6 @@ export const adminMenu: MenuItem[] = [
     icon: Ticket,
   },
   {
-    id: 'whatsapp',
-    label: 'WhatsApp',
-    icon: MessageCircle,
-  },
-  {
     id: 'fiscal',
     label: 'Calendário Fiscal',
     icon: CalendarDays,
