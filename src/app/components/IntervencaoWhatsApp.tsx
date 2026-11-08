@@ -39,7 +39,14 @@ function mensagemErro(erro: unknown, fallback: string) {
 function ordenar(lista: Mensagem[]) {
   const vistos = new Set<string>();
   return lista
-    .filter((m) => (vistos.has(m.id) ? false : (vistos.add(m.id), true)))
+    .filter((m) => {
+      // chave estavel: id do servidor -> wa_id -> texto+direcao+minuto
+      const minuto = m.data ? m.data.slice(0, 16) : '';
+      const chave = m.id || `${m.numero}|${m.fromMe ? 'out' : 'in'}|${m.texto}|${minuto}`;
+      if (vistos.has(chave)) return false;
+      vistos.add(chave);
+      return true;
+    })
     .sort((a, b) => (a.data ? Date.parse(a.data) : 0) - (b.data ? Date.parse(b.data) : 0));
 }
 
@@ -163,13 +170,9 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
       setErro(null);
     }
     try {
-      // Histórico guardado pelo webhook (SQLite) + recebidas; se vazio, vai à Evolution
-      const [doContato, recebidas] = await Promise.all([
-        whatsappService.mensagensDoContato(alvo).catch(() => [] as Mensagem[]),
-        whatsappService.mensagensRecebidasPorNumero(alvo).catch(() => [] as Mensagem[]),
-      ]);
-      let lista = [...doContato, ...recebidas];
-      if (lista.length === 0) lista = await whatsappService.mensagensPorNumero(alvo);
+      // Histórico guardado pelo webhook (Django) — uma só leitura, sem duplicar a lista
+      let lista = await whatsappService.mensagensRecebidasPorNumero(alvo).catch(() => [] as Mensagem[]);
+      if (!lista.length) lista = await whatsappService.mensagensPorNumero(alvo).catch(() => [] as Mensagem[]);
       if (numeroRef.current === alvo) setMensagens(ordenar(lista));
     } catch (e) {
       if (!silencioso && numeroRef.current === alvo) setErro(mensagemErro(e, 'Não foi possível carregar as mensagens WhatsApp.'));
@@ -186,7 +189,11 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
   useEffect(() => {
     if (!numero) return;
     const ligacao = ligarWhatsAppWS({
-      onEstado: setWsLigado,
+      onEstado: (ligado) => {
+        setWsLigado(ligado);
+        // ao (re)ligar, recupera o que passou enquanto esteve offline
+        if (ligado) carregar(numeroRef.current, true);
+      },
       onEvento: (evento) => {
         if (evento.event !== 'messages.upsert' || !('mensagem' in evento) || !evento.mensagem) return;
         const alvo = evento.mensagem.numero || evento.contato?.numero;
@@ -204,6 +211,16 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
     if (!numero) return;
     const id = window.setInterval(() => carregar(numero, true), 10000);
     return () => window.clearInterval(id);
+  }, [numero, carregar]);
+
+  // Ao voltar ao separador, recarrega (o browser suspende o WS em segundo plano)
+  useEffect(() => {
+    if (!numero) return;
+    const aoVoltar = () => {
+      if (document.visibilityState === 'visible') carregar(numeroRef.current, true);
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => document.removeEventListener('visibilitychange', aoVoltar);
   }, [numero, carregar]);
 
   useEffect(() => {
@@ -322,19 +339,12 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
       } else {
         await whatsappService.enviar({ numero, texto: conteudo });
       }
-      setMensagens((lista) => ordenar([...lista, {
-        id: `local-${Date.now()}`,
-        numero,
-        texto: anexo ? (conteudo || '') : conteudo,
-        fromMe: true,
-        data: new Date().toISOString(),
-        tipo: anexo ? mediatypeDe(anexo.type || '') : 'text',
-        mediaUrl: urlFoto,
-        raw: null,
-      } as Mensagem]));
+      // Sem "eco" local: o backend já gravou a mensagem, recarrega para evitar duplicados
+      // (o evento do WebSocket traz a mesma mensagem e criaria uma segunda bolha)
       setTexto('');
       setAnexo(null);
       if (ficheiroRef.current) ficheiroRef.current.value = '';
+      await carregar(numero, true);
     } catch (erroEnv) {
       setErroEnvio(mensagemErro(erroEnv, 'Falha ao enviar pelo WhatsApp.'));
     } finally {
