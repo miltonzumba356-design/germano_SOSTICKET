@@ -224,7 +224,7 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const candidatos = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'];
+      const candidatos = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
       const mime = candidatos.find((t) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
       const gravador = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       pedacosRef.current = [];
@@ -242,7 +242,7 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
 
         if (blob.size < 1200) return; // gravação demasiado curta
 
-        const extensao = tipo.includes('ogg') ? 'ogg' : 'webm';
+        const extensao = tipo.includes('ogg') ? 'ogg' : tipo.includes('mp4') ? 'm4a' : 'webm';
         const ficheiro = new File([blob], `audio-${Date.now()}.${extensao}`, { type: tipo });
         setEnviando(true);
         try {
