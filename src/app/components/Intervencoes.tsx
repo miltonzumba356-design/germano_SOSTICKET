@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useRealtimeSignal } from '../hooks/useRealtimeSignal';
 import { Intervencao } from '../types/api';
 import type { Cliente } from '../types/api';
@@ -146,7 +146,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const [exibirModalDetalhes, setExibirModalDetalhes] = useState(false);
   const [intervencaoDetalhe, setIntervencaoDetalhe] = useState<Intervencao | null>(null);
   const [novoComentario, setNovoComentario] = useState('');
-  const [abaChat, setAbaChat] = useState<'whatsapp' | 'ticket'>('whatsapp');
+  const [abaChat, setAbaChat] = useState<'whatsapp' | 'ticket'>('ticket');
+  const fimChatRef = useRef<HTMLDivElement>(null);
   const [abaPrincipal, setAbaPrincipal] = useState<'tickets' | 'whatsapp'>('tickets');
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
   const [visualizadorAnexo, setVisualizadorAnexo] = useState<{ url: string; nome: string; lista: { url: string; nome: string }[]; indice: number } | null>(null);
@@ -322,6 +323,34 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
 
   // Real-time: atualiza a lista silenciosamente a cada 15 s e on cross-tab invalidate
   useRealtimeSignal('intervencoes', () => carregarIntervencoes(true), { interval: 15_000 });
+
+  // Chat interno: mantém a conversa aberta sincronizada enquanto o modal está aberto.
+  // Sem isto, o admin só via as mensagens novas do cliente ao fechar e reabrir o atendimento.
+  useEffect(() => {
+    if (!exibirModalDetalhes || !intervencaoDetalhe?.id || abaChat !== 'ticket') return;
+    const id = intervencaoDetalhe.id;
+    const timer = setInterval(async () => {
+      try {
+        const atual = await intervencoesService.obterPorId(id);
+        setIntervencaoDetalhe((prev) => {
+          if (!prev || prev.id !== id) return prev;
+          const antes = (prev.comentarios || []).map((c: any) => c.id).join('|');
+          const depois = (atual.comentarios || []).map((c: any) => c.id).join('|');
+          return antes === depois ? prev : atual;
+        });
+      } catch {
+        // silencioso: uma falha de rede não deve interromper a conversa
+      }
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [exibirModalDetalhes, intervencaoDetalhe?.id, abaChat]);
+
+  // Chat interno: acompanha o fim da conversa quando chega uma mensagem nova.
+  useEffect(() => {
+    if (exibirModalDetalhes && abaChat === 'ticket') {
+      fimChatRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [intervencaoDetalhe?.comentarios?.length, exibirModalDetalhes, abaChat]);
 
   const abrirModalAtribuir = (intervencao: Intervencao) => {
     setIntervencaoAtribuir(intervencao);
@@ -1300,24 +1329,29 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                   {/* Comentários */}
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <h4 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                        <MessageSquare className="w-5 h-5 text-theme-primary" />
-                        Comunicação / Chat
-                      </h4>
+                      <div>
+                        <h4 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                          <MessageSquare className="w-5 h-5 text-theme-primary" />
+                          Comunicação
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Chat interno = mensagens dentro da app (o cliente vê). WhatsApp = conversa externa.
+                        </p>
+                      </div>
                       <div className="inline-flex rounded-xl bg-gray-100 p-1 text-xs font-bold">
+                        <button
+                          type="button"
+                          onClick={() => setAbaChat('ticket')}
+                          className={`px-3 py-1.5 rounded-lg transition-colors ${abaChat === 'ticket' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+                        >
+                          Chat interno ({intervencaoDetalhe.comentarios?.length || 0})
+                        </button>
                         <button
                           type="button"
                           onClick={() => setAbaChat('whatsapp')}
                           className={`px-3 py-1.5 rounded-lg transition-colors ${abaChat === 'whatsapp' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
                         >
                           WhatsApp
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAbaChat('ticket')}
-                          className={`px-3 py-1.5 rounded-lg transition-colors ${abaChat === 'ticket' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
-                        >
-                          Comentários do ticket ({intervencaoDetalhe.comentarios?.length || 0})
                         </button>
                       </div>
                     </div>
@@ -1328,10 +1362,12 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                     <>
                     <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                       {!intervencaoDetalhe.comentarios || intervencaoDetalhe.comentarios.length === 0 ? (
-                        <p className="text-sm text-gray-500 italic py-4">Nenhuma mensagem trocada ainda.</p>
+                        <p className="text-sm text-gray-500 italic py-4">
+                          Ainda não há mensagens neste chat. O cliente pode escrever aqui e a equipa responde no mesmo sítio.
+                        </p>
                       ) : (
                         intervencaoDetalhe.comentarios.map((com, i) => (
-                          <div key={i} className={`flex flex-col ${com.usuario_nome === usuario?.nome ? 'items-end' : 'items-start'}`}>
+                          <div key={com.id || i} className={`flex flex-col ${com.usuario_nome === usuario?.nome ? 'items-end' : 'items-start'}`}>
                             <div className={`max-w-[80%] p-4 rounded-2xl ${com.usuario_nome === usuario?.nome ? 'bg-theme-primary text-white' : 'bg-gray-100 text-gray-800'}`}>
                               <p className="text-sm font-medium">{com.texto}</p>
                             </div>
@@ -1341,6 +1377,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                           </div>
                         ))
                       )}
+                      <div ref={fimChatRef} />
                     </div>
 
                     <form onSubmit={handleEnviarComentario} className="mt-6 flex gap-2">
