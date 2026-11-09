@@ -146,7 +146,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const [exibirModalDetalhes, setExibirModalDetalhes] = useState(false);
   const [intervencaoDetalhe, setIntervencaoDetalhe] = useState<Intervencao | null>(null);
   const [novoComentario, setNovoComentario] = useState('');
-  const [abaChat, setAbaChat] = useState<'whatsapp' | 'ticket'>('ticket');
+  const [abaChat, setAbaChat] = useState<'ticket' | 'whatsapp' | 'apchat'>('apchat');
   const fimChatRef = useRef<HTMLDivElement>(null);
   const [abaPrincipal, setAbaPrincipal] = useState<'tickets' | 'whatsapp'>('tickets');
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
@@ -327,7 +327,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   // Chat interno: mantém a conversa aberta sincronizada enquanto o modal está aberto.
   // Sem isto, o admin só via as mensagens novas do cliente ao fechar e reabrir o atendimento.
   useEffect(() => {
-    if (!exibirModalDetalhes || !intervencaoDetalhe?.id || abaChat !== 'ticket') return;
+    if (!exibirModalDetalhes || !intervencaoDetalhe?.id || abaChat !== 'apchat') return;
     const id = intervencaoDetalhe.id;
     const timer = setInterval(async () => {
       try {
@@ -347,7 +347,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
 
   // Chat interno: acompanha o fim da conversa quando chega uma mensagem nova.
   useEffect(() => {
-    if (exibirModalDetalhes && abaChat === 'ticket') {
+    if (exibirModalDetalhes && abaChat === 'apchat') {
       fimChatRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [intervencaoDetalhe?.comentarios?.length, exibirModalDetalhes, abaChat]);
@@ -1318,86 +1318,124 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
 
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Coluna Esquerda: Info e Comentários */}
-                <div className="lg:col-span-2 space-y-8">
-                  {/* Descrição */}
-                  <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
-                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Descrição do Pedido</h4>
-                    <p className="text-gray-700 font-medium leading-relaxed">{intervencaoDetalhe.descricao}</p>
+                {/* Coluna Esquerda: separadores Ticket / WhatsApp / apchat */}
+                <div className="lg:col-span-2 space-y-6">
+                  {/* Separadores */}
+                  <div className="inline-flex w-full rounded-2xl bg-gray-100 p-1 text-sm font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setAbaChat('ticket')}
+                      className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl transition-colors ${abaChat === 'ticket' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+                    >
+                      <Ticket className="w-4 h-4" />
+                      Ticket
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAbaChat('whatsapp')}
+                      className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl transition-colors ${abaChat === 'whatsapp' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      WhatsApp
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAbaChat('apchat')}
+                      className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl transition-colors ${abaChat === 'apchat' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      apchat ({intervencaoDetalhe.comentarios?.length || 0})
+                    </button>
                   </div>
 
-                  {/* Comentários */}
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
+                  {/* Aba Ticket */}
+                  {abaChat === 'ticket' && (
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Descrição do Pedido</h4>
+                        <p className="text-gray-700 font-medium leading-relaxed whitespace-pre-wrap">{intervencaoDetalhe.descricao}</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Estado</span>
+                          <p className="text-sm font-bold text-gray-800 mt-1 capitalize">{(intervencaoDetalhe.status || '').replace('_', ' ')}</p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Prioridade</span>
+                          <p className="text-sm font-bold text-gray-800 mt-1 capitalize">{intervencaoDetalhe.prioridade || '—'}</p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Abertura</span>
+                          <p className="text-sm font-bold text-gray-800 mt-1">
+                            {intervencaoDetalhe.data_abertura || intervencaoDetalhe.data_criacao
+                              ? new Date((intervencaoDetalhe.data_abertura || intervencaoDetalhe.data_criacao) as string).toLocaleString('pt-PT')
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Actuação</span>
+                          <p className="text-sm font-bold text-gray-800 mt-1 capitalize">{intervencaoDetalhe.actuacao_tipo || '—'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Aba WhatsApp */}
+                  {abaChat === 'whatsapp' && (
+                    <IntervencaoWhatsApp intervencao={intervencaoDetalhe} clientes={clientes} />
+                  )}
+
+                  {/* Aba apchat (chat interno) */}
+                  {abaChat === 'apchat' && (
+                    <div className="space-y-4">
                       <div>
                         <h4 className="text-lg font-black text-gray-900 flex items-center gap-2">
                           <MessageSquare className="w-5 h-5 text-theme-primary" />
-                          Comunicação
+                          apchat
                         </h4>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          Chat interno = mensagens dentro da app (o cliente vê). WhatsApp = conversa externa.
+                          Chat interno da aplicação — mensagens entre o cliente e a equipa, fora do WhatsApp.
                         </p>
                       </div>
-                      <div className="inline-flex rounded-xl bg-gray-100 p-1 text-xs font-bold">
-                        <button
-                          type="button"
-                          onClick={() => setAbaChat('ticket')}
-                          className={`px-3 py-1.5 rounded-lg transition-colors ${abaChat === 'ticket' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
-                        >
-                          Chat interno ({intervencaoDetalhe.comentarios?.length || 0})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAbaChat('whatsapp')}
-                          className={`px-3 py-1.5 rounded-lg transition-colors ${abaChat === 'whatsapp' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
-                        >
-                          WhatsApp
-                        </button>
-                      </div>
-                    </div>
 
-                    {abaChat === 'whatsapp' ? (
-                      <IntervencaoWhatsApp intervencao={intervencaoDetalhe} clientes={clientes} />
-                    ) : (
-                    <>
-                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
-                      {!intervencaoDetalhe.comentarios || intervencaoDetalhe.comentarios.length === 0 ? (
-                        <p className="text-sm text-gray-500 italic py-4">
-                          Ainda não há mensagens neste chat. O cliente pode escrever aqui e a equipa responde no mesmo sítio.
-                        </p>
-                      ) : (
-                        intervencaoDetalhe.comentarios.map((com, i) => (
-                          <div key={com.id || i} className={`flex flex-col ${com.usuario_nome === usuario?.nome ? 'items-end' : 'items-start'}`}>
-                            <div className={`max-w-[80%] p-4 rounded-2xl ${com.usuario_nome === usuario?.nome ? 'bg-theme-primary text-white' : 'bg-gray-100 text-gray-800'}`}>
-                              <p className="text-sm font-medium">{com.texto}</p>
+                      <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                        {!intervencaoDetalhe.comentarios || intervencaoDetalhe.comentarios.length === 0 ? (
+                          <p className="text-sm text-gray-500 italic py-4">
+                            Ainda não há mensagens neste chat. O cliente pode escrever aqui e a equipa responde no mesmo sítio.
+                          </p>
+                        ) : (
+                          intervencaoDetalhe.comentarios.map((com, i) => (
+                            <div key={com.id || i} className={`flex flex-col ${com.usuario_nome === usuario?.nome ? 'items-end' : 'items-start'}`}>
+                              <div className={`max-w-[80%] p-4 rounded-2xl ${com.usuario_nome === usuario?.nome ? 'bg-theme-primary text-white' : 'bg-gray-100 text-gray-800'}`}>
+                                <p className="text-sm font-medium">{com.texto}</p>
+                              </div>
+                              <span className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">
+                                {com.usuario_nome} • {new Date(com.data_criacao).toLocaleString('pt-PT')}
+                              </span>
                             </div>
-                            <span className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">
-                              {com.usuario_nome} • {new Date(com.data_criacao).toLocaleString('pt-PT')}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                      <div ref={fimChatRef} />
-                    </div>
+                          ))
+                        )}
+                        <div ref={fimChatRef} />
+                      </div>
 
-                    <form onSubmit={handleEnviarComentario} className="mt-6 flex gap-2">
-                      <input 
-                        type="text"
-                        value={novoComentario}
-                        onChange={(e) => setNovoComentario(e.target.value)}
-                        placeholder="Escreva uma mensagem..."
-                        className="flex-1 px-5 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
-                      />
-                      <button 
-                        type="submit"
-                        className="p-4 bg-theme-primary text-white rounded-2xl hover:bg-theme-primary-hover shadow-lg shadow-indigo-100 transition-all"
-                      >
-                        <ArrowRight className="w-6 h-6" />
-                      </button>
-                    </form>
-                    </>
-                    )}
-                  </div>
+                      <form onSubmit={handleEnviarComentario} className="flex gap-2">
+                        <input 
+                          type="text"
+                          value={novoComentario}
+                          onChange={(e) => setNovoComentario(e.target.value)}
+                          placeholder="Escreva uma mensagem..."
+                          className="flex-1 px-5 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                        />
+                        <button 
+                          type="submit"
+                          className="p-4 bg-theme-primary text-white rounded-2xl hover:bg-theme-primary-hover shadow-lg shadow-indigo-100 transition-all"
+                        >
+                          <ArrowRight className="w-6 h-6" />
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </div>
 
                 {/* Coluna Direita: Status, Info Técnica e Anexos */}
