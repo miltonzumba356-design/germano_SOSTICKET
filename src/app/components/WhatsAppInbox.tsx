@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Intervencao } from '../types/api';
-import { clientesService, intervencoesService } from '../services/api';
+import { clientesService, intervencoesService, tecnicosService } from '../services/api';
 import {
   Contato,
   Mensagem,
@@ -82,6 +82,7 @@ interface Props {
 export function WhatsAppInbox({ podeCriarTicket, onAbrirTicket, onTicketCriado }: Props) {
   const [contatos, setContatos] = useState<Contato[]>([]);
   const [clientes, setClientes] = useState<any[]>([]);
+  const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [wsLigado, setWsLigado] = useState(false);
@@ -113,20 +114,36 @@ export function WhatsAppInbox({ podeCriarTicket, onAbrirTicket, onTicketCriado }
     return mapa;
   }, [clientes]);
 
+  // número normalizado -> pessoa da API principal (cliente ou técnico)
+  const pessoaPorNumero = useMemo(() => {
+    const mapa = new Map<string, { nome: string; tipo: 'cliente' | 'tecnico'; raw: any }>();
+    clientes.forEach((c) => {
+      const n = numeroWhatsApp(c.telefone);
+      if (n) mapa.set(n, { nome: c.nome, tipo: 'cliente', raw: c });
+    });
+    tecnicos.forEach((t) => {
+      const n = numeroWhatsApp(t.telefone);
+      if (n && !mapa.has(n)) mapa.set(n, { nome: t.nome, tipo: 'tecnico', raw: t });
+    });
+    return mapa;
+  }, [clientes, tecnicos]);
+
   const contatoAtual = useMemo(
     () => (selecionado ? contatos.find((c) => c.numero === selecionado) || ({ numero: selecionado, nome: null, raw: null } as Contato) : null),
     [contatos, selecionado],
   );
   const clienteAtual = contatoAtual ? clientePorNumero.get(contatoAtual.numero) : undefined;
+  const pessoaAtual = contatoAtual ? pessoaPorNumero.get(contatoAtual.numero) : undefined;
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro(null);
     try {
-      const [conversas, lista, cli] = await Promise.allSettled([
+      const [conversas, lista, cli, tec] = await Promise.allSettled([
         whatsappService.conversas(),
         whatsappService.listarContatos(),
         clientesService.listar({ limit: 500 }),
+        tecnicosService.listar({ limit: 500 }),
       ]);
       if (conversas.status === 'rejected' && lista.status === 'rejected') throw conversas.reason;
       setContatos(fundirContatos(
@@ -134,6 +151,7 @@ export function WhatsAppInbox({ podeCriarTicket, onAbrirTicket, onTicketCriado }
         lista.status === 'fulfilled' ? lista.value : [],
       ));
       if (cli.status === 'fulfilled') setClientes(listaDe(cli.value));
+      if (tec.status === 'fulfilled') setTecnicos(listaDe(tec.value));
     } catch (e) {
       setErro(mensagemErro(e, 'Não foi possível carregar as conversas WhatsApp.'));
     } finally {
@@ -201,12 +219,12 @@ export function WhatsAppInbox({ podeCriarTicket, onAbrirTicket, onTicketCriado }
       .sort((a, b) => (b.ultimaData ? Date.parse(b.ultimaData) : 0) - (a.ultimaData ? Date.parse(a.ultimaData) : 0))
       .filter((c) => {
         if (filtro === 'por_ler' && !c.naoLidas) return false;
-        if (filtro === 'por_identificar' && clientePorNumero.has(c.numero)) return false;
+        if (filtro === 'por_identificar' && pessoaPorNumero.has(c.numero)) return false;
         if (!termo) return true;
-        const cli = clientePorNumero.get(c.numero);
-        return c.numero.includes(termo) || (c.nome || '').toLowerCase().includes(termo) || (cli?.nome || '').toLowerCase().includes(termo);
+        const pessoa = pessoaPorNumero.get(c.numero);
+        return c.numero.includes(termo) || (c.nome || '').toLowerCase().includes(termo) || (pessoa?.nome || '').toLowerCase().includes(termo);
       });
-  }, [contatos, pesquisa, filtro, clientePorNumero]);
+  }, [contatos, pesquisa, filtro, pessoaPorNumero]);
 
   const ticketAberto = tickets.find((t) => !STATUS_FECHADOS.includes(String(t.status).toLowerCase()));
 
@@ -327,7 +345,7 @@ export function WhatsAppInbox({ podeCriarTicket, onAbrirTicket, onTicketCriado }
 
   // ---------- Render ----------
 
-  const nomeContato = (c: Contato) => clientePorNumero.get(c.numero)?.nome || c.nome || `+${c.numero}`;
+  const nomeContato = (c: Contato) => pessoaPorNumero.get(c.numero)?.nome || c.nome || `+${c.numero}`;
 
   return (
     <div className="space-y-3">
@@ -391,7 +409,7 @@ export function WhatsAppInbox({ podeCriarTicket, onAbrirTicket, onTicketCriado }
             ) : filtrados.length === 0 ? (
               <p className="p-6 text-sm text-center text-gray-500">{pesquisa || filtro !== 'todas' ? 'Nenhum resultado.' : 'Ainda não há conversas.'}</p>
             ) : filtrados.map((c) => {
-              const cli = clientePorNumero.get(c.numero);
+              const pessoa = pessoaPorNumero.get(c.numero);
               return (
                 <button
                   key={c.numero}
@@ -412,7 +430,13 @@ export function WhatsAppInbox({ podeCriarTicket, onAbrirTicket, onTicketCriado }
                         <span className="min-w-5 h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">{c.naoLidas}</span>
                       )}
                     </span>
-                    {!cli && <span className="inline-block mt-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Por identificar</span>}
+                    {!pessoa ? (
+                      <span className="inline-block mt-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Por identificar</span>
+                    ) : (
+                      <span className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${pessoa.tipo === 'tecnico' ? 'text-sky-700 bg-sky-50' : 'text-emerald-700 bg-emerald-50'}`}>
+                        {pessoa.tipo === 'tecnico' ? 'Técnico' : 'Cliente'}
+                      </span>
+                    )}
                   </span>
                 </button>
               );
@@ -437,10 +461,14 @@ export function WhatsAppInbox({ podeCriarTicket, onAbrirTicket, onTicketCriado }
                   <p className="text-sm font-bold text-gray-900 truncate">{nomeContato(contatoAtual)}</p>
                   <p className="text-xs text-gray-500">
                     +{contatoAtual.numero}
-                    {clienteAtual ? ` · Cliente: ${clienteAtual.nome}` : ' · Não associado a cliente'}
+                    {clienteAtual
+                      ? ` · Cliente: ${clienteAtual.nome}`
+                      : pessoaAtual?.tipo === 'tecnico'
+                        ? ` · Técnico: ${pessoaAtual.nome}`
+                        : ' · Não associado a cliente'}
                   </p>
                 </div>
-                {!clienteAtual && (
+                {!clienteAtual && pessoaAtual?.tipo !== 'tecnico' && (
                   <button
                     onClick={() => { setErroModal(null); setModalAssociar(true); }}
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 text-xs font-bold hover:bg-amber-100"
