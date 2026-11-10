@@ -5,7 +5,7 @@ import {
   CheckCircle2, AlertCircle, FileText, Film, MessageCircle,
   Pencil, Trash2, Clock, ArrowLeft, SlidersHorizontal, Check,
   Bot, ClipboardList, UploadCloud, Image as ImageIcon,
-  Download, ChevronLeft, ChevronRight,
+  Download, ChevronLeft, ChevronRight, Music,
 } from 'lucide-react';
 import type { Empresa, Intervencao } from '../../types/api';
 import { ConversaListItem } from './ConversaListItem';
@@ -665,8 +665,14 @@ function MensagemBolha({
   );
 }
 
+function nomeAnexoLimpo(nome?: string) {
+  const bruto = String(nome || 'Anexo');
+  return bruto.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '') || bruto;
+}
+
 function AnexoBolha({ url, nome, onAbrir }: { url: string; nome?: string; onAbrir: () => void }) {
-  const tipo = detectarTipoAnexo(url);
+  const tipo = detectarTipoAnexo(url, nome);
+  const nomeLimpo = nomeAnexoLimpo(nome);
 
   if (tipo === 'imagem') {
     return (
@@ -675,8 +681,26 @@ function AnexoBolha({ url, nome, onAbrir }: { url: string; nome?: string; onAbri
         onClick={onAbrir}
         className="block rounded-[18px] overflow-hidden shadow-sm max-w-[240px] active:scale-[0.98] transition-transform"
       >
-        <img src={url} alt={nome || 'Anexo'} className="w-full h-auto max-h-72 object-cover" />
+        <img src={url} alt={nomeLimpo} className="w-full h-auto max-h-72 object-cover" />
       </button>
+    );
+  }
+
+  // Áudio toca aqui mesmo, com um toque.
+  if (tipo === 'audio') {
+    return (
+      <div className="w-[260px] max-w-[78vw] p-2.5 bg-white rounded-[16px] border border-[#e5e7eb] shadow-sm">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+            <Music className="w-4 h-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold text-[#191c1e] truncate">{nomeLimpo}</p>
+            <p className="text-[10px] text-[#4a4455] uppercase">Áudio · toca aqui</p>
+          </div>
+        </div>
+        <audio src={url} controls preload="metadata" className="w-full h-9" />
+      </div>
     );
   }
 
@@ -688,7 +712,7 @@ function AnexoBolha({ url, nome, onAbrir }: { url: string; nome?: string; onAbri
       className="flex items-center gap-2 px-3 py-2.5 bg-[#7c3aed] text-white rounded-[14px] text-xs font-semibold hover:opacity-90 transition-all active:scale-[0.98] max-w-[240px] shadow-sm"
     >
       <Icon className="w-5 h-5 flex-shrink-0" />
-      <span className="truncate">{nome || 'Anexo'}</span>
+      <span className="truncate">{nomeLimpo}</span>
     </button>
   );
 }
@@ -702,7 +726,7 @@ function VisualizadorAnexo({
   onNavegar: (indice: number) => void;
 }) {
   const atual = lista[indice];
-  const tipo = detectarTipoAnexo(atual.url);
+  const tipo = detectarTipoAnexo(atual.url, atual.nome);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -717,7 +741,7 @@ function VisualizadorAnexo({
   return (
     <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col select-none" onContextMenu={(e) => e.preventDefault()}>
       <div className="flex items-center justify-between px-4 py-3 flex-shrink-0 pt-[calc(12px_+_env(safe-area-inset-top,0px))]">
-        <p className="text-sm text-white truncate flex-1">{atual.nome || 'Anexo'}</p>
+        <p className="text-sm text-white truncate flex-1">{nomeAnexoLimpo(atual.nome)}</p>
         <div className="flex items-center gap-2 flex-shrink-0 ml-3">
           {lista.length > 1 && <span className="text-xs text-white/60 mr-1">{indice + 1} / {lista.length}</span>}
           <a
@@ -773,6 +797,22 @@ function VisualizadorAnexo({
         {tipo === 'video' && (
           <video key={atual.url} src={atual.url} controls className="max-h-full max-w-full px-12" />
         )}
+        {tipo === 'audio' && (
+          <div className="w-full max-w-md px-6">
+            <div className="bg-white/10 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="w-12 h-12 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center">
+                  <Music className="w-6 h-6" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-white truncate">{nomeAnexoLimpo(atual.nome)}</p>
+                  <p className="text-[11px] text-white/50 uppercase">Áudio</p>
+                </div>
+              </div>
+              <audio key={atual.url} src={atual.url} controls autoPlay className="w-full" />
+            </div>
+          </div>
+        )}
         {tipo === 'outro' && (
           <div className="text-center px-8">
             <Paperclip className="w-16 h-16 text-gray-500 mx-auto mb-4" />
@@ -792,7 +832,7 @@ function VisualizadorAnexo({
                 idx === indice ? 'border-[#7c3aed]' : 'border-transparent hover:border-white/30'
               }`}
             >
-              {detectarTipoAnexo(item.url) === 'imagem' ? (
+              {detectarTipoAnexo(item.url, item.nome) === 'imagem' ? (
                 <img src={item.url} alt={item.nome} className="w-full h-full object-cover" draggable={false} />
               ) : (
                 <div className="w-full h-full bg-gray-800 flex items-center justify-center">

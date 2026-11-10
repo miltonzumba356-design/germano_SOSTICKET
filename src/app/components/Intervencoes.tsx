@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRealtimeSignal } from '../hooks/useRealtimeSignal';
 import { Intervencao } from '../types/api';
 import type { Cliente } from '../types/api';
@@ -23,6 +23,7 @@ import {
   ChevronRight,
   MoreVertical,
   MessageSquare,
+  Music,
   Paperclip,
   CheckCircle2,
   AlertTriangle,
@@ -77,14 +78,23 @@ function getHorasRegistadas(intervencao: Intervencao) {
   return arredondado === 0 ? 0.01 : arredondado;
 }
 
-type TipoAnexo = 'imagem' | 'pdf' | 'video' | 'outro';
+type TipoAnexo = 'imagem' | 'pdf' | 'video' | 'audio' | 'outro';
 
-function detectarTipoAnexo(url: string): TipoAnexo {
-  const semQuery = (url || '').split('?')[0].split('#')[0].toLowerCase();
-  const ext = semQuery.split('.').pop() || '';
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'].includes(ext)) return 'imagem';
+function detectarTipoAnexo(url: string, nome?: string): TipoAnexo {
+  const bruto = (nome || '').toLowerCase();
+  const urlLimpa = (url || '').split('#')[0].toLowerCase();
+  const semQuery = urlLimpa.split('?')[0];
+  // Cloudinary entrega por /raw/download?...&format=png (sem extensão no caminho).
+  const formato = (urlLimpa.match(/[?&]format=([a-z0-9]{2,5})/) || [])[1] || '';
+  const extDoNome = (bruto.match(/\.([a-z0-9]{2,5})$/) || [])[1] || '';
+  const ext = extDoNome || formato || (semQuery.split('.').pop() || '');
+
+  if (ext === 'webm' && /(audio|voz|voice|nota)/.test(bruto)) return 'audio';
+
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'heic', 'heif'].includes(ext)) return 'imagem';
   if (ext === 'pdf') return 'pdf';
-  if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+  if (['mp4', 'webm', 'mov', 'avi', 'mkv', 'm4v'].includes(ext)) return 'video';
+  if (['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'opus', 'weba', 'amr', '3gp'].includes(ext)) return 'audio';
   // Cloudinary pode não ter extensão — inferir por path (image/, video/, raw/)
   if (semQuery.includes('/image/')) return 'imagem';
   if (semQuery.includes('/video/')) return 'video';
@@ -1504,7 +1514,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                     <div className="grid grid-cols-2 gap-3">
                       {intervencaoDetalhe.anexos?.map((anexo, i) => {
                         const listaAnexos = (intervencaoDetalhe.anexos || []).map((a: any) => ({ url: a.url, nome: a.nome_arquivo }));
-                        const tipo = detectarTipoAnexo(anexo.url);
+                        const tipo = detectarTipoAnexo(anexo.url, anexo.nome_arquivo);
                         const thumb = tipo === 'imagem' ? (
                           <img src={anexo.url} alt={anexo.nome_arquivo} className="w-full h-16 object-cover rounded-lg mb-2 pointer-events-none" draggable={false} />
                         ) : tipo === 'pdf' ? (
@@ -1784,7 +1794,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
             )}
 
             {/* Imagem */}
-            {detectarTipoAnexo(visualizadorAnexo.url) === 'imagem' && (
+            {detectarTipoAnexo(visualizadorAnexo.url, visualizadorAnexo.nome) === 'imagem' && (
               <img
                 src={visualizadorAnexo.url}
                 alt={visualizadorAnexo.nome}
@@ -1795,7 +1805,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
             )}
 
             {/* PDF — iframe com toolbar oculta e sem download */}
-            {detectarTipoAnexo(visualizadorAnexo.url) === 'pdf' && (
+            {detectarTipoAnexo(visualizadorAnexo.url, visualizadorAnexo.nome) === 'pdf' && (
               <iframe
                 key={visualizadorAnexo.url}
                 src={`${visualizadorAnexo.url}#toolbar=0&navpanes=0&scrollbar=1&statusbar=0&messages=0`}
@@ -1806,7 +1816,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
             )}
 
             {/* Vídeo — sem opção de download */}
-            {detectarTipoAnexo(visualizadorAnexo.url) === 'video' && (
+            {detectarTipoAnexo(visualizadorAnexo.url, visualizadorAnexo.nome) === 'video' && (
               <video
                 key={visualizadorAnexo.url}
                 src={visualizadorAnexo.url}
@@ -1818,8 +1828,26 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
               />
             )}
 
+            {/* Áudio */}
+            {detectarTipoAnexo(visualizadorAnexo.url, visualizadorAnexo.nome) === 'audio' && (
+              <div className="w-full max-w-md px-6">
+                <div className="bg-white/10 rounded-2xl p-6 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-12 h-12 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center">
+                      <Music className="w-6 h-6" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-white truncate">{visualizadorAnexo.nome}</p>
+                      <p className="text-[11px] text-white/50 uppercase">Áudio</p>
+                    </div>
+                  </div>
+                  <audio key={visualizadorAnexo.url} src={visualizadorAnexo.url} controls autoPlay className="w-full" />
+                </div>
+              </div>
+            )}
+
             {/* Tipo desconhecido */}
-            {detectarTipoAnexo(visualizadorAnexo.url) === 'outro' && (
+            {detectarTipoAnexo(visualizadorAnexo.url, visualizadorAnexo.nome) === 'outro' && (
               <div className="text-center px-8">
                 <Paperclip className="w-16 h-16 text-gray-500 mx-auto mb-4" />
                 <p className="text-white font-medium">{visualizadorAnexo.nome}</p>

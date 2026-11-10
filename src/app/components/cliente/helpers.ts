@@ -143,12 +143,25 @@ export function ultimaAtualizacao(intervencao: Intervencao): string | undefined 
   return new Date(Math.max(...datas)).toISOString();
 }
 
-export function detectarTipoAnexo(url: string): 'imagem' | 'pdf' | 'video' | 'outro' {
-  const semQuery = (url || '').split('?')[0].split('#')[0].toLowerCase();
-  const ext = semQuery.split('.').pop() || '';
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'].includes(ext)) return 'imagem';
+export type TipoAnexo = 'imagem' | 'pdf' | 'video' | 'audio' | 'outro';
+
+export function detectarTipoAnexo(url: string, nome?: string): TipoAnexo {
+  const bruto = (nome || '').toLowerCase();
+  const urlLimpa = (url || '').split('#')[0].toLowerCase();
+  const semQuery = urlLimpa.split('?')[0];
+
+  // Cloudinary entrega por /raw/download?...&format=png (sem extensão no caminho).
+  const formato = (urlLimpa.match(/[?&]format=([a-z0-9]{2,5})/) || [])[1] || '';
+  const extDoNome = (bruto.match(/\.([a-z0-9]{2,5})$/) || [])[1] || '';
+  const ext = extDoNome || formato || (semQuery.split('.').pop() || '');
+
+  // Gravações de voz podem vir como .webm — o nome indica que é áudio.
+  if (ext === 'webm' && /(audio|voz|voice|nota)/.test(bruto)) return 'audio';
+
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'heic', 'heif'].includes(ext)) return 'imagem';
   if (ext === 'pdf') return 'pdf';
-  if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+  if (['mp4', 'webm', 'mov', 'avi', 'mkv', 'm4v'].includes(ext)) return 'video';
+  if (['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'opus', 'weba', 'amr', '3gp'].includes(ext)) return 'audio';
   if (semQuery.includes('/image/')) return 'imagem';
   if (semQuery.includes('/video/')) return 'video';
   if (semQuery.includes('.pdf')) return 'pdf';
