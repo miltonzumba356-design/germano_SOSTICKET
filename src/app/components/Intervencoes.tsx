@@ -562,6 +562,16 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
     }
   };
 
+  // Recarrega o detalhe sem mostrar spinner — usado pelo polling da conversa do cliente.
+  const recarregarDetalheSilencioso = async (id: string) => {
+    try {
+      const data = await intervencoesService.obterPorId(id);
+      setIntervencaoDetalhe((prev) => (prev && prev.id === id ? data : prev));
+    } catch {
+      // silencioso
+    }
+  };
+
   const handleEnviarComentario = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!intervencaoDetalhe || !novoComentario.trim()) return;
@@ -722,6 +732,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         intervencaoDetalhe={intervencaoDetalhe}
         carregandoDetalhe={carregandoDetalhe}
         handleVerDetalhes={handleVerDetalhes}
+        onAtualizarDetalhe={recarregarDetalheSilencioso}
         novoComentario={novoComentario}
         setNovoComentario={setNovoComentario}
         handleEnviarComentario={handleEnviarComentario}

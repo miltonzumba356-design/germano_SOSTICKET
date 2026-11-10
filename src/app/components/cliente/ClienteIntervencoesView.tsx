@@ -65,6 +65,7 @@ export interface ClienteIntervencoesViewProps {
   intervencaoDetalhe: Intervencao | null;
   carregandoDetalhe: boolean;
   handleVerDetalhes: (id: string) => void | Promise<void>;
+  onAtualizarDetalhe?: (id: string) => void | Promise<void>;
   novoComentario: string;
   setNovoComentario: (v: string) => void;
   handleEnviarComentario: (e: React.FormEvent) => void | Promise<void>;
@@ -109,7 +110,7 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
     pagina, setPagina, totalPaginas, contratos, novoTicket, setNovoTicket,
     status, exibirModalNovo, setExibirModalNovo, handleCreateTicket,
     exibirModalDetalhes, setExibirModalDetalhes, intervencaoDetalhe, carregandoDetalhe,
-    handleVerDetalhes, novoComentario, setNovoComentario, handleEnviarComentario,
+    handleVerDetalhes, onAtualizarDetalhe, novoComentario, setNovoComentario, handleEnviarComentario,
     podeClienteAlterar, exibirModalEditar, setExibirModalEditar, formEditar, setFormEditar,
     abrirEditarCliente, handleEditarCliente, salvandoEdicao, handleDeletarIntervencao,
     handleUploadAnexo, onAtualizar,
@@ -181,6 +182,36 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
   useEffect(() => {
     fimDaThreadRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [intervencaoDetalhe?.comentarios?.length, exibirModalDetalhes]);
+
+  // Mantém a conversa aberta sincronizada: as respostas do admin/equipa
+  // aparecem sem o cliente ter de fechar e reabrir o atendimento.
+  const onAtualizarDetalheRef = useRef(onAtualizarDetalhe);
+  onAtualizarDetalheRef.current = onAtualizarDetalhe;
+  useEffect(() => {
+    if (!exibirModalDetalhes || !intervencaoDetalhe?.id) return;
+    const id = intervencaoDetalhe.id;
+    const timer = setInterval(() => onAtualizarDetalheRef.current?.(id), 10_000);
+    return () => clearInterval(timer);
+  }, [exibirModalDetalhes, intervencaoDetalhe?.id]);
+
+  // Junta mensagens e anexos pela ordem real da conversa.
+  const linhaDoTempo = useMemo(() => {
+    if (!intervencaoDetalhe) return [] as Array<any>;
+    const itens: Array<any> = [
+      ...(intervencaoDetalhe.anexos || []).map((a: any, indice: number) => ({
+        tipo: 'anexo' as const,
+        data: a.data_criacao,
+        anexo: a,
+        indice,
+      })),
+      ...(intervencaoDetalhe.comentarios || []).map((com: any) => ({
+        tipo: 'msg' as const,
+        data: com.data_criacao,
+        com,
+      })),
+    ];
+    return itens.sort((x, y) => String(x.data || '').localeCompare(String(y.data || '')));
+  }, [intervencaoDetalhe]);
 
   const abrirConversa = (intervencao: Intervencao) => {
     setExibirModalNovo(false);
@@ -342,36 +373,44 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
                 rotulo="Solicitação inicial"
               />
 
-              {intervencaoDetalhe.anexos && intervencaoDetalhe.anexos.length > 0 && (
-                <div className="flex justify-end">
-                  <div className="max-w-[80%] flex flex-col items-end gap-2">
-                    {intervencaoDetalhe.anexos.map((anexo: any, i: number) => (
-                      <AnexoBolha
-                        key={i}
-                        url={anexo.url}
-                        nome={anexo.nome_arquivo}
-                        onAbrir={() =>
-                          setVisualizador({
-                            lista: intervencaoDetalhe.anexos!.map((a: any) => ({ url: a.url, nome: a.nome_arquivo })),
-                            indice: i,
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {linhaDoTempo.map((item, i) => {
+                // Anexos entram na sequência real da conversa, não todos no topo.
+                if (item.tipo === 'anexo') {
+                  return (
+                    <div key={`anexo-${item.indice}`} className="flex justify-end">
+                      <div className="max-w-[80%] flex flex-col items-end gap-2">
+                        <AnexoBolha
+                          url={item.anexo.url}
+                          nome={item.anexo.nome_arquivo}
+                          onAbrir={() =>
+                            setVisualizador({
+                              lista: (intervencaoDetalhe.anexos || []).map((a: any) => ({
+                                url: a.url,
+                                nome: a.nome_arquivo,
+                              })),
+                              indice: item.indice,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  );
+                }
 
-              {(intervencaoDetalhe.comentarios || []).map((com: any, i: number, lista: any[]) => (
-                <MensagemBolha
-                  key={i}
-                  autor={com.usuario_nome}
-                  texto={com.texto}
-                  data={com.data_criacao}
-                  minha={com.usuario_nome === usuario?.nome}
-                  repetida={i > 0 && lista[i - 1]?.usuario_nome === com.usuario_nome}
-                />
-              ))}
+                const anterior = i > 0 ? linhaDoTempo[i - 1] : null;
+                return (
+                  <MensagemBolha
+                    key={`msg-${i}`}
+                    autor={item.com.usuario_nome}
+                    texto={item.com.texto}
+                    data={item.com.data_criacao}
+                    minha={item.com.usuario_nome === usuario?.nome}
+                    repetida={
+                      !!anterior && anterior.tipo === 'msg' && anterior.com.usuario_nome === item.com.usuario_nome
+                    }
+                  />
+                );
+              })}
               <div ref={fimDaThreadRef} />
             </>
           )}

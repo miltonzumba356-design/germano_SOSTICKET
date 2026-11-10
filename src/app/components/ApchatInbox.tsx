@@ -1,10 +1,16 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
   Building2,
+  FileText,
+  Film,
+  Image as ImageIcon,
   Loader2,
   MessageSquare,
+  Mic,
+  Music,
+  Paperclip,
   Phone,
   Plus,
   RefreshCw,
@@ -67,6 +73,137 @@ function nomeEmpresa(empresa?: string | { nome?: string; Email_empresa?: string 
   return empresa.nome || empresa.Email_empresa || '';
 }
 
+function extensaoDe(anexo: any) {
+  const nome = String(anexo?.nome_arquivo || anexo?.nome || '');
+  if (/\.[a-z0-9]{2,5}$/i.test(nome)) return nome.toLowerCase();
+  const url = String(anexo?.url || '');
+  // Cloudinary entrega por /raw/download?...&format=png
+  const m = url.match(/[?&]format=([a-z0-9]{2,5})/i);
+  if (m) return `x.${m[1].toLowerCase()}`;
+  return url.toLowerCase().split('?')[0];
+}
+
+function tipoAnexo(anexo: any) {
+  const alvo = extensaoDe(anexo);
+  if (/\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/.test(alvo)) return 'imagem';
+  if (/\.(mp4|webm|mov|avi|mkv|m4v)$/.test(alvo)) return 'video';
+  if (/\.(mp3|wav|ogg|oga|m4a|aac|opus|weba|amr|3gp)$/.test(alvo)) return 'audio';
+  if (/\.pdf$/.test(alvo)) return 'pdf';
+  return 'outro';
+}
+
+function nomeAnexo(a: any) {
+  const bruto = String(
+    a?.nome_arquivo || a?.nome || String(a?.url || '').split('/').pop() || 'Ficheiro',
+  );
+  // Remove o prefixo UUID que o backend acrescenta ao guardar.
+  return bruto.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '') || bruto;
+}
+
+// Anexo dentro da conversa, na posição cronológica correcta.
+function BolhaAnexo({
+  anexo,
+  onAbrir,
+}: {
+  anexo: any;
+  onAbrir: (v: { url: string; nome: string; tipo: string }) => void;
+}) {
+  const tipo = tipoAnexo(anexo);
+  const nome = nomeAnexo(anexo);
+  const hora = horaMensagem(anexo.data_criacao);
+  const abrir = () => onAbrir({ url: anexo.url, nome, tipo });
+
+  if (tipo === 'imagem') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[260px]">
+          <button
+            type="button"
+            onClick={abrir}
+            className="block rounded-2xl overflow-hidden border border-black/5 shadow-sm bg-white hover:opacity-95 transition-opacity"
+            title={nome}
+          >
+            <img src={anexo.url} alt={nome} className="block max-h-[300px] w-auto object-cover" />
+          </button>
+          <p className="text-[10px] text-right mt-1 text-gray-500">{hora}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tipo === 'audio') {
+    return (
+      <div className="flex justify-end">
+        <div className="w-full sm:w-[320px] p-2.5 rounded-2xl rounded-br-md bg-white border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+              <Music className="w-4 h-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold text-gray-700 truncate">{nome}</p>
+              <p className="text-[10px] text-gray-400 uppercase">Áudio · toca aqui</p>
+            </div>
+            <a
+              href={anexo.url}
+              target="_blank"
+              rel="noreferrer"
+              title="Abrir noutro separador"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-theme-primary hover:bg-gray-50"
+            >
+              <Paperclip className="w-4 h-4" />
+            </a>
+          </div>
+          <audio src={anexo.url} controls preload="metadata" className="w-full h-9" />
+          <p className="text-[10px] text-right mt-1 text-gray-400">{hora}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-end">
+      <button
+        type="button"
+        onClick={abrir}
+        className="flex items-center gap-2.5 max-w-[280px] p-2.5 pr-3 rounded-2xl rounded-br-md bg-white border border-gray-100 shadow-sm hover:border-theme-primary transition-colors text-left"
+        title={nome}
+      >
+        <span
+          className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            tipo === 'video'
+              ? 'bg-purple-50 text-purple-500'
+              : tipo === 'pdf'
+              ? 'bg-red-50 text-red-500'
+              : 'bg-gray-100 text-gray-500'
+          }`}
+        >
+          {tipo === 'video' ? (
+            <Film className="w-5 h-5" />
+          ) : tipo === 'pdf' ? (
+            <FileText className="w-5 h-5" />
+          ) : (
+            <Paperclip className="w-5 h-5" />
+          )}
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[11px] font-bold text-gray-700 truncate">{nome}</span>
+          <span className="block text-[10px] text-gray-400 uppercase">
+            {tipo} · abrir · {hora}
+          </span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
+// Fundo suave do chat (estilo WhatsApp), com um padrão discreto.
+const FUNDO_CHAT: CSSProperties = {
+  backgroundColor: '#f4f1ec',
+  backgroundImage:
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Cg fill='%23000000' fill-opacity='0.035'%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3Ccircle cx='48' cy='24' r='1.6'/%3E%3Ccircle cx='30' cy='44' r='2'/%3E%3Ccircle cx='60' cy='58' r='1.6'/%3E%3Ccircle cx='8' cy='60' r='1.6'/%3E%3C/g%3E%3C/svg%3E\")",
+  backgroundSize: '72px 72px',
+};
+
 interface Props {
   usuarioNome?: string;
   onTicketCriado?: () => void;
@@ -99,8 +236,17 @@ export function ApchatInbox({
   const [carregandoConversa, setCarregandoConversa] = useState(false);
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [enviandoAnexo, setEnviandoAnexo] = useState(false);
   const [modalTicket, setModalTicket] = useState<ModalTicket | null>(null);
+  const [visualizador, setVisualizador] = useState<{ url: string; nome: string; tipo: string } | null>(null);
+  const [gravando, setGravando] = useState(false);
+  const [segundosGravacao, setSegundosGravacao] = useState(0);
+  const [erroAudio, setErroAudio] = useState<string | null>(null);
   const fimRef = useRef<HTMLDivElement>(null);
+  const inputAnexoRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksAudioRef = useRef<Blob[]>([]);
+  const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const carregarLista = async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
@@ -214,6 +360,40 @@ export function ApchatInbox({
   const totalComMensagens = linhas.filter((l) => l.coms.length > 0).length;
   const comentarios = detalhe?.comentarios || [];
 
+  // Mensagens e anexos intercalados pela ordem real da conversa.
+  const timeline = useMemo(() => {
+    const itens: Array<{ tipo: 'descricao' | 'mensagem' | 'anexo'; id: string; data?: string | null; dado: any }> = [];
+
+    if (detalhe?.descricao) {
+      itens.push({
+        tipo: 'descricao',
+        id: `descricao-${detalhe.id}`,
+        data: detalhe.data_abertura,
+        dado: detalhe,
+      });
+    }
+
+    for (const c of detalhe?.comentarios || []) {
+      itens.push({
+        tipo: 'mensagem',
+        id: String(c.id || `m-${c.data_criacao}-${String(c.texto || '').slice(0, 12)}`),
+        data: c.data_criacao,
+        dado: c,
+      });
+    }
+
+    for (const a of detalhe?.anexos || []) {
+      itens.push({
+        tipo: 'anexo',
+        id: String(a.id || `a-${a.url}`),
+        data: a.data_criacao,
+        dado: a,
+      });
+    }
+
+    return itens.sort((x, y) => String(x.data || '').localeCompare(String(y.data || '')));
+  }, [detalhe]);
+
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
     if (!detalhe || !texto.trim() || enviando) return;
@@ -232,6 +412,92 @@ export function ApchatInbox({
       setEnviando(false);
     }
   };
+
+  const enviarAnexo = async (file?: File | null) => {
+    if (!detalhe || !file || enviandoAnexo) return;
+    setEnviandoAnexo(true);
+    try {
+      await intervencoesService.carregarAnexo(detalhe.id, file);
+      await carregarConversa(detalhe.id, true);
+    } catch {
+      // silencioso
+    } finally {
+      setEnviandoAnexo(false);
+      if (inputAnexoRef.current) inputAnexoRef.current.value = '';
+    }
+  };
+
+  // ── Gravação de áudio (nota de voz) ─────────────────────────
+  const iniciarGravacao = async () => {
+    setErroAudio(null);
+    if (!detalhe) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setErroAudio('Este navegador não suporta gravação de áudio.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksAudioRef.current = [];
+
+      mr.ondataavailable = (ev) => {
+        if (ev.data.size > 0) chunksAudioRef.current.push(ev.data);
+      };
+
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksAudioRef.current, { type: mr.mimeType || 'audio/webm' });
+        chunksAudioRef.current = [];
+        if (blob.size > 0) {
+          const ext = (mr.mimeType || '').includes('ogg') ? 'ogg' : 'webm';
+          const file = new File([blob], `audio-${Date.now()}.${ext}`, {
+            type: blob.type || 'audio/webm',
+          });
+          await enviarAnexo(file);
+        }
+      };
+
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setGravando(true);
+      setSegundosGravacao(0);
+      timerGravacaoRef.current = setInterval(() => setSegundosGravacao((s) => s + 1), 1000);
+    } catch {
+      setErroAudio('Não foi possível aceder ao microfone. Autoriza o microfone no navegador.');
+    }
+  };
+
+  const pararGravacao = (cancelar = false) => {
+    if (timerGravacaoRef.current) {
+      clearInterval(timerGravacaoRef.current);
+      timerGravacaoRef.current = null;
+    }
+    const mr = mediaRecorderRef.current;
+    if (mr) {
+      if (cancelar) {
+        chunksAudioRef.current = [];
+        mr.onstop = null;
+        mr.stream.getTracks().forEach((t) => t.stop());
+        mr.stop();
+      } else {
+        mr.stop();
+      }
+    }
+    mediaRecorderRef.current = null;
+    setGravando(false);
+  };
+
+  // Limpa gravação pendente ao desmontar.
+  useEffect(() => {
+    return () => {
+      if (timerGravacaoRef.current) clearInterval(timerGravacaoRef.current);
+      const mr = mediaRecorderRef.current;
+      if (mr) {
+        mr.stream.getTracks().forEach((t) => t.stop());
+        try { mr.stop(); } catch { /* ignore */ }
+      }
+    };
+  }, []);
 
   const abrirModalTicket = () => {
     if (!clienteSel) return;
@@ -446,7 +712,7 @@ export function ApchatInbox({
                 </header>
 
                 {/* Mensagens */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3" style={FUNDO_CHAT}>
                   {!intervencaoSelecionada ? (
                     <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
                       <Ticket className="w-8 h-8 text-gray-300" />
@@ -469,22 +735,47 @@ export function ApchatInbox({
                       <Loader2 className="w-4 h-4 animate-spin" />
                       <span className="text-xs font-medium">A carregar conversa...</span>
                     </div>
-                  ) : comentarios.length === 0 ? (
+                  ) : timeline.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center gap-2 text-center">
                       <MessageSquare className="w-8 h-8 text-gray-300" />
                       <p className="text-sm font-bold text-gray-700">Ainda não há mensagens</p>
                       <p className="text-xs text-gray-500">Escreve a primeira mensagem para este cliente.</p>
                     </div>
                   ) : (
-                    comentarios.map((com, i) => {
+                    timeline.map((item) => {
+                      // Anexos aparecem na posição cronológica, como no WhatsApp.
+                      if (item.tipo === 'anexo') {
+                        return <BolhaAnexo key={item.id} anexo={item.dado} onAbrir={setVisualizador} />;
+                      }
+
+                      // Primeira mensagem: a descrição do ticket.
+                      if (item.tipo === 'descricao') {
+                        return (
+                          <div key={item.id} className="flex justify-start">
+                            <div className="max-w-[75%] px-4 py-2.5 rounded-2xl rounded-bl-md bg-white text-gray-800 border border-gray-100/80 shadow">
+                              <p className="text-[10px] font-black uppercase tracking-wide text-theme-primary mb-0.5">
+                                Solicitação inicial
+                              </p>
+                              <p className="text-sm font-medium whitespace-pre-wrap break-words">
+                                {item.dado.descricao}
+                              </p>
+                              <p className="text-[10px] mt-1 text-right text-gray-400">
+                                {horaMensagem(item.data)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const com = item.dado;
                       const meu = !!usuarioNome && com.usuario_nome === usuarioNome;
                       return (
-                        <div key={com.id || i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
+                        <div key={item.id} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
                           <div
-                            className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm ${
+                            className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow ${
                               meu
-                                ? 'bg-theme-primary text-white rounded-br-md'
-                                : 'bg-white text-gray-800 border border-gray-100 rounded-bl-md'
+                                ? 'bg-gradient-to-br from-theme-primary to-indigo-600 text-white rounded-br-md'
+                                : 'bg-white text-gray-800 border border-gray-100/80 rounded-bl-md'
                             }`}
                           >
                             {!meu && (
@@ -510,21 +801,81 @@ export function ApchatInbox({
 
                 {/* Composer */}
                 {intervencaoSelecionada && (
-                  <form onSubmit={enviar} className="p-3 border-t border-gray-100 bg-white flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={texto}
-                      onChange={(e) => setTexto(e.target.value)}
-                      placeholder="Escreve uma mensagem..."
-                      className="flex-1 px-4 py-3 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
-                    />
-                    <button
-                      type="submit"
-                      disabled={enviando || !texto.trim()}
-                      className="p-3 bg-theme-primary text-white rounded-xl hover:bg-theme-primary-hover shadow-lg shadow-indigo-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                    </button>
+                  <form onSubmit={enviar} className="border-t border-gray-100 bg-white">
+                    {erroAudio && (
+                      <p className="px-4 pt-2 text-[11px] font-medium text-red-600">{erroAudio}</p>
+                    )}
+
+                    {gravando ? (
+                      <div className="p-3 flex items-center gap-3">
+                        <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                        <span className="text-sm font-bold text-red-600 tabular-nums">
+                          A gravar{' '}
+                          {String(Math.floor(segundosGravacao / 60)).padStart(2, '0')}:
+                          {String(segundosGravacao % 60).padStart(2, '0')}
+                        </span>
+                        <div className="flex-1" />
+                        <button
+                          type="button"
+                          onClick={() => pararGravacao(true)}
+                          title="Cancelar"
+                          className="p-3 text-gray-500 hover:bg-gray-100 rounded-xl transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => pararGravacao(false)}
+                          className="inline-flex items-center gap-2 px-4 py-3 bg-theme-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-theme-primary-hover transition-colors"
+                        >
+                          <Send className="w-4 h-4" /> Enviar áudio
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-3 flex items-center gap-2">
+                        <input
+                          ref={inputAnexoRef}
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => enviarAnexo(e.target.files?.[0])}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => inputAnexoRef.current?.click()}
+                          disabled={enviandoAnexo}
+                          title="Anexar ficheiro (foto, áudio, documento)"
+                          className="p-3 text-gray-500 hover:text-theme-primary hover:bg-gray-50 rounded-xl transition-colors disabled:opacity-50"
+                        >
+                          {enviandoAnexo ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                        </button>
+                        <input
+                          type="text"
+                          value={texto}
+                          onChange={(e) => setTexto(e.target.value)}
+                          placeholder="Escreve uma mensagem..."
+                          className="flex-1 px-4 py-3 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                        />
+                        {texto.trim() ? (
+                          <button
+                            type="submit"
+                            disabled={enviando}
+                            className="p-3 bg-theme-primary text-white rounded-xl hover:bg-theme-primary-hover shadow-lg shadow-indigo-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={iniciarGravacao}
+                            disabled={enviandoAnexo}
+                            title="Gravar áudio"
+                            className="p-3 bg-theme-primary text-white rounded-xl hover:bg-theme-primary-hover shadow-lg shadow-indigo-100 transition-all disabled:opacity-50"
+                          >
+                            <Mic className="w-5 h-5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </form>
                 )}
               </>
@@ -532,6 +883,74 @@ export function ApchatInbox({
           </section>
         </div>
       </div>
+
+      {/* Visualizador de fotos, vídeos, áudio e documentos */}
+      {visualizador && (
+        <div
+          className="fixed inset-0 bg-black/85 z-[95] flex items-center justify-center p-4"
+          onClick={() => setVisualizador(null)}
+        >
+          <div className="w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-3 text-white">
+              <p className="text-sm font-bold truncate">{visualizador.nome}</p>
+              <button
+                type="button"
+                onClick={() => setVisualizador(null)}
+                className="p-2 rounded-full hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {visualizador.tipo === 'imagem' ? (
+              <img
+                src={visualizador.url}
+                alt={visualizador.nome}
+                className="max-h-[75vh] w-auto mx-auto rounded-2xl shadow-2xl"
+              />
+            ) : visualizador.tipo === 'video' ? (
+              <video
+                src={visualizador.url}
+                controls
+                autoPlay
+                className="max-h-[75vh] w-full rounded-2xl bg-black shadow-2xl"
+              />
+            ) : visualizador.tipo === 'audio' ? (
+              <div className="bg-white rounded-2xl p-6 space-y-3">
+                <div className="flex items-center gap-3 text-gray-700">
+                  <span className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <Music className="w-6 h-6" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{visualizador.nome}</p>
+                    <p className="text-[11px] text-gray-400 uppercase">Áudio</p>
+                  </div>
+                </div>
+                <audio src={visualizador.url} controls autoPlay className="w-full" />
+              </div>
+            ) : visualizador.tipo === 'pdf' ? (
+              <iframe
+                src={visualizador.url}
+                title={visualizador.nome}
+                className="w-full h-[75vh] rounded-2xl bg-white shadow-2xl"
+              />
+            ) : (
+              <div className="bg-white rounded-2xl p-8 text-center space-y-3">
+                <FileText className="w-12 h-12 text-red-500 mx-auto" />
+                <p className="text-sm text-gray-600">Pré-visualização não disponível para este ficheiro.</p>
+                <a
+                  href={visualizador.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block px-4 py-2 rounded-xl bg-theme-primary text-white text-sm font-bold"
+                >
+                  Abrir ficheiro
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal criar ticket */}
       {modalTicket && clienteSel && (
