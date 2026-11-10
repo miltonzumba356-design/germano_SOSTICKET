@@ -5,7 +5,6 @@ import {
   Building2,
   FileText,
   Film,
-  Image as ImageIcon,
   Loader2,
   MessageSquare,
   Mic,
