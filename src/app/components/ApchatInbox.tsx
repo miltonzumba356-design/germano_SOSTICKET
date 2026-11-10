@@ -84,6 +84,8 @@ function extensaoDe(anexo: any) {
 
 function tipoAnexo(anexo: any) {
   const alvo = extensaoDe(anexo);
+  // Gravações de voz chegam como .webm — o nome diz que é áudio.
+  if (/\.webm$/.test(alvo) && /nota-de-voz|voz|voice|audio/i.test(String(anexo?.nome_arquivo || anexo?.nome || ''))) return 'audio';
   if (/\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/.test(alvo)) return 'imagem';
   if (/\.(mp4|webm|mov|avi|mkv|m4v)$/.test(alvo)) return 'video';
   if (/\.(mp3|wav|ogg|oga|m4a|aac|opus|weba|amr|3gp)$/.test(alvo)) return 'audio';
@@ -95,8 +97,16 @@ function nomeAnexo(a: any) {
   const bruto = String(
     a?.nome_arquivo || a?.nome || String(a?.url || '').split('/').pop() || 'Ficheiro',
   );
-  // Remove o prefixo UUID que o backend acrescenta ao guardar.
-  return bruto.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '') || bruto;
+  // Remove o prefixo UUID e o sufixo aleatório do Cloudinary.
+  return bruto
+    .replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '')
+    .replace(/_([a-z0-9]{6})(\.[a-z0-9]{2,5})$/i, '$2') || bruto;
+}
+
+function rotuloAnexo(a: any) {
+  const bruto = nomeAnexo(a);
+  if (tipoAnexo(a) === 'audio' && /nota-de-voz|voz|voice/i.test(bruto)) return 'Nota de voz';
+  return bruto;
 }
 
 // Anexo dentro da conversa, na posição cronológica correcta.
@@ -139,7 +149,7 @@ function BolhaAnexo({
               <Music className="w-4 h-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold text-gray-700 truncate">{nome}</p>
+              <p className="text-[11px] font-bold text-gray-700 truncate">{rotuloAnexo(anexo)}</p>
               <p className="text-[10px] text-gray-400 uppercase">Áudio · toca aqui</p>
             </div>
             <a

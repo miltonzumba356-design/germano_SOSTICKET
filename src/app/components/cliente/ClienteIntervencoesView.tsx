@@ -5,7 +5,7 @@ import {
   CheckCircle2, AlertCircle, FileText, Film, MessageCircle,
   Pencil, Trash2, Clock, ArrowLeft, SlidersHorizontal, Check,
   Bot, ClipboardList, UploadCloud, Image as ImageIcon,
-  Download, ChevronLeft, ChevronRight, Music,
+  Download, ChevronLeft, ChevronRight, Music, Mic,
 } from 'lucide-react';
 import type { Empresa, Intervencao } from '../../types/api';
 import { ConversaListItem } from './ConversaListItem';
@@ -128,9 +128,15 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
   const [historicoAberto, setHistoricoAberto] = useState(false);
   const [filtroPrioridadeAberto, setFiltroPrioridadeAberto] = useState(false);
   const [enviandoAnexo, setEnviandoAnexo] = useState(false);
+  const [gravando, setGravando] = useState(false);
+  const [segundosGravacao, setSegundosGravacao] = useState(0);
+  const [erroAudio, setErroAudio] = useState<string | null>(null);
   const [visualizador, setVisualizador] = useState<{ lista: { url: string; nome?: string }[]; indice: number } | null>(null);
   const fimDaThreadRef = useRef<HTMLDivElement>(null);
   const inputAnexoRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksAudioRef = useRef<Blob[]>([]);
+  const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ultimoErroMostrado = useRef<string>('');
 
   const modoChat = exibirModalNovo || (exibirModalDetalhes && !!intervencaoDetalhe);
@@ -247,6 +253,87 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
       if (inputAnexoRef.current) inputAnexoRef.current.value = '';
     }
   };
+
+  // ── Nota de voz: gravar e enviar sem sair da conversa ─────────
+  const iniciarGravacao = async () => {
+    setErroAudio(null);
+    if (!intervencaoDetalhe) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setErroAudio('Este navegador não suporta gravação de áudio.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksAudioRef.current = [];
+
+      mr.ondataavailable = (ev) => {
+        if (ev.data.size > 0) chunksAudioRef.current.push(ev.data);
+      };
+
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksAudioRef.current, { type: mr.mimeType || 'audio/webm' });
+        chunksAudioRef.current = [];
+        if (blob.size === 0) return;
+
+        const ext = (mr.mimeType || '').includes('ogg') ? 'ogg' : 'webm';
+        // O nome começa por "nota-de-voz" para o chat reconhecer como áudio.
+        const file = new File([blob], `nota-de-voz-${Date.now()}.${ext}`, {
+          type: blob.type || 'audio/webm',
+        });
+
+        setEnviandoAnexo(true);
+        try {
+          await handleUploadAnexo(intervencaoDetalhe.id, file);
+        } finally {
+          setEnviandoAnexo(false);
+        }
+      };
+
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setGravando(true);
+      setSegundosGravacao(0);
+      timerGravacaoRef.current = setInterval(() => setSegundosGravacao((s) => s + 1), 1000);
+    } catch {
+      setErroAudio('Não foi possível aceder ao microfone. Autoriza o microfone no navegador.');
+    }
+  };
+
+  const pararGravacao = (cancelar = false) => {
+    if (timerGravacaoRef.current) {
+      clearInterval(timerGravacaoRef.current);
+      timerGravacaoRef.current = null;
+    }
+    const mr = mediaRecorderRef.current;
+    if (mr) {
+      if (cancelar) {
+        chunksAudioRef.current = [];
+        mr.onstop = null;
+        mr.stream.getTracks().forEach((t) => t.stop());
+        mr.stop();
+      } else {
+        mr.stop();
+      }
+    }
+    mediaRecorderRef.current = null;
+    setGravando(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerGravacaoRef.current) clearInterval(timerGravacaoRef.current);
+      const mr = mediaRecorderRef.current;
+      if (mr) {
+        // Ao sair da conversa a gravação é descartada (não envia áudio a meio).
+        mr.onstop = null;
+        chunksAudioRef.current = [];
+        mr.stream.getTracks().forEach((t) => t.stop());
+        try { mr.stop(); } catch { /* ignore */ }
+      }
+    };
+  }, []);
 
   const podeEditar = intervencaoDetalhe ? podeClienteAlterar(intervencaoDetalhe) : false;
 
@@ -417,65 +504,110 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
         </div>
 
         {/* Composer de mensagem */}
-        <form onSubmit={handleEnviarComentario} className="flex-shrink-0 p-3 bg-white border-t border-[#e5e7eb] flex items-center gap-2 relative">
-          {emojiAberto && (
-            <div className="absolute bottom-16 left-3 bg-white border border-gray-100 rounded-2xl shadow-2xl p-3 grid grid-cols-8 gap-1 z-30">
-              {EMOJIS_RAPIDOS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => { inserirEmoji(emoji); setEmojiAberto(false); }}
-                  className="text-xl hover:bg-gray-100 rounded-lg p-1"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
+        <form onSubmit={handleEnviarComentario} className="flex-shrink-0 bg-white border-t border-[#e5e7eb] relative">
+          {erroAudio && (
+            <p className="px-4 pt-2 text-[11px] font-medium text-red-600">{erroAudio}</p>
           )}
-          <input
-            ref={inputAnexoRef}
-            type="file"
-            multiple
-            accept="image/*,application/pdf"
-            className="hidden"
-            onChange={(e) => onSelecionarAnexoChat(e.target.files)}
-          />
-          <button
-            type="button"
-            onClick={() => inputAnexoRef.current?.click()}
-            disabled={enviandoAnexo}
-            className="p-2.5 text-[#630ed4] bg-[#ede0ff] hover:bg-[#e2d1ff] rounded-full transition-colors flex-shrink-0 disabled:opacity-40"
-          >
-            {enviandoAnexo ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setEmojiAberto((v) => !v)}
-            className="p-2 text-[#4a4455] hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
-          >
-            <Smile className="w-5 h-5" />
-          </button>
-          <input
-            value={novoComentario}
-            onChange={(e) => setNovoComentario(e.target.value)}
-            placeholder="Escreva uma mensagem..."
-            className="flex-1 px-4 py-2.5 bg-white border border-[#e5e7eb] rounded-[12px] outline-none focus:ring-2 focus:ring-[#7c3aed] focus:border-[#7c3aed] transition-all text-sm"
-          />
-          {novoComentario.trim() ? (
-            <button
-              type="submit"
-              className="p-2.5 bg-[#7c3aed] text-white rounded-full hover:bg-[#630ed4] shadow-md transition-all flex-shrink-0"
-            >
-              <Send className="w-5 h-5" />
-            </button>
+
+          {gravando ? (
+            <div className="p-3 flex items-center gap-3">
+              <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+              <span className="text-sm font-bold text-red-600 tabular-nums">
+                A gravar {String(Math.floor(segundosGravacao / 60)).padStart(2, '0')}:
+                {String(segundosGravacao % 60).padStart(2, '0')}
+              </span>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={() => pararGravacao(true)}
+                title="Cancelar"
+                className="p-2.5 text-[#4a4455] hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => pararGravacao(false)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#7c3aed] text-white rounded-full text-sm font-bold shadow-md hover:bg-[#630ed4] transition-all flex-shrink-0"
+              >
+                <Send className="w-4 h-4" /> Enviar áudio
+              </button>
+            </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => inputAnexoRef.current?.click()}
-              className="p-2.5 text-[#4a4455] hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
+            <div className="p-3 flex items-center gap-2 relative">
+              {emojiAberto && (
+                <div className="absolute bottom-16 left-3 bg-white border border-gray-100 rounded-2xl shadow-2xl p-3 grid grid-cols-8 gap-1 z-30">
+                  {EMOJIS_RAPIDOS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => { inserirEmoji(emoji); setEmojiAberto(false); }}
+                      className="text-xl hover:bg-gray-100 rounded-lg p-1"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={inputAnexoRef}
+                type="file"
+                multiple
+                accept="image/*,application/pdf,audio/*,video/*"
+                className="hidden"
+                onChange={(e) => onSelecionarAnexoChat(e.target.files)}
+              />
+              <button
+                type="button"
+                onClick={() => inputAnexoRef.current?.click()}
+                disabled={enviandoAnexo}
+                title="Anexar foto, documento ou áudio"
+                className="p-2.5 text-[#630ed4] bg-[#ede0ff] hover:bg-[#e2d1ff] rounded-full transition-colors flex-shrink-0 disabled:opacity-40"
+              >
+                {enviandoAnexo ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEmojiAberto((v) => !v)}
+                className="p-2 text-[#4a4455] hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+              <input
+                value={novoComentario}
+                onChange={(e) => setNovoComentario(e.target.value)}
+                placeholder="Escreva uma mensagem..."
+                className="flex-1 px-4 py-2.5 bg-white border border-[#e5e7eb] rounded-[12px] outline-none focus:ring-2 focus:ring-[#7c3aed] focus:border-[#7c3aed] transition-all text-sm"
+              />
+              {novoComentario.trim() ? (
+                <button
+                  type="submit"
+                  className="p-2.5 bg-[#7c3aed] text-white rounded-full hover:bg-[#630ed4] shadow-md transition-all flex-shrink-0"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => inputAnexoRef.current?.click()}
+                    title="Anexar ficheiro"
+                    className="p-2.5 text-[#4a4455] hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={iniciarGravacao}
+                    disabled={enviandoAnexo}
+                    title="Gravar áudio"
+                    className="p-2.5 bg-[#7c3aed] text-white rounded-full hover:bg-[#630ed4] shadow-md transition-all flex-shrink-0 disabled:opacity-40"
+                  >
+                    <Mic className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </form>
 
@@ -667,12 +799,20 @@ function MensagemBolha({
 
 function nomeAnexoLimpo(nome?: string) {
   const bruto = String(nome || 'Anexo');
-  return bruto.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '') || bruto;
+  return bruto
+    .replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '')
+    // Cloudinary acrescenta um sufixo aleatório antes da extensão.
+    .replace(/_([a-z0-9]{6})(\.[a-z0-9]{2,5})$/i, '$2') || bruto;
+}
+
+function rotuloAnexo(nome: string | undefined, tipo: ReturnType<typeof detectarTipoAnexo>) {
+  if (tipo === 'audio' && /nota-de-voz|voz|voice/i.test(nome || '')) return 'Nota de voz';
+  return nomeAnexoLimpo(nome);
 }
 
 function AnexoBolha({ url, nome, onAbrir }: { url: string; nome?: string; onAbrir: () => void }) {
   const tipo = detectarTipoAnexo(url, nome);
-  const nomeLimpo = nomeAnexoLimpo(nome);
+  const nomeLimpo = rotuloAnexo(nome, tipo);
 
   if (tipo === 'imagem') {
     return (
@@ -741,7 +881,7 @@ function VisualizadorAnexo({
   return (
     <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col select-none" onContextMenu={(e) => e.preventDefault()}>
       <div className="flex items-center justify-between px-4 py-3 flex-shrink-0 pt-[calc(12px_+_env(safe-area-inset-top,0px))]">
-        <p className="text-sm text-white truncate flex-1">{nomeAnexoLimpo(atual.nome)}</p>
+        <p className="text-sm text-white truncate flex-1">{rotuloAnexo(atual.nome, tipo)}</p>
         <div className="flex items-center gap-2 flex-shrink-0 ml-3">
           {lista.length > 1 && <span className="text-xs text-white/60 mr-1">{indice + 1} / {lista.length}</span>}
           <a
@@ -805,7 +945,7 @@ function VisualizadorAnexo({
                   <Music className="w-6 h-6" />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-white truncate">{nomeAnexoLimpo(atual.nome)}</p>
+                  <p className="text-sm font-bold text-white truncate">{rotuloAnexo(atual.nome, tipo)}</p>
                   <p className="text-[11px] text-white/50 uppercase">Áudio</p>
                 </div>
               </div>
