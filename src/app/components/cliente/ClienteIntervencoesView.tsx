@@ -7,6 +7,9 @@ import {
   Bot, ClipboardList, UploadCloud, Image as ImageIcon,
   Download, ChevronLeft, ChevronRight, Music, Mic,
 } from 'lucide-react';
+import { usePushNotifications } from "@/app/hooks/usePushNotifications";
+import { useRealtimeTranslation } from "@/app/hooks/useRealtimeTranslation";
+import { TicketRequestsAdmin } from "../admin/TicketRequestsAdmin";
 import type { Empresa, Intervencao } from '../../types/api';
 import { ConversaListItem } from './ConversaListItem';
 import { ConversaSkeleton } from './Skeletons';
@@ -118,6 +121,87 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
 
   const { ocultarChrome, registarAoAtualizar } = useClienteChrome();
 
+  // Hook para Web Push Notifications
+  const { permission, subscription, isSupported, register } = usePushNotifications();
+
+  // Hook para tradução em tempo real com Deepseek
+  const {
+    language,
+    setLanguage,
+    translationResult,
+    translate,
+    getDirection,
+    supportedLanguages,
+    isTranslating,
+    isError,
+    isFallback,
+    deepseekConfigured,
+  } = useRealtimeTranslation('sk-6c52be78ffeb4bde8d5066b4ac90a439');
+
+  // ── Sistema de Solicitação de Acesso a Tickets ───────────────────────
+  const [solicitandoAcesso, setSolicitandoAcesso] = useState(false);
+  const [assumindoTicket, setAssumindoTicket] = useState(false);
+  const [solicitacaoResultado, setSolicitacaoResultado] = useState<{ tipo: 'sucesso' | 'erro'; mensagem: string } | null>(null);
+
+  const API_BASE = '/api/intervencoes';
+
+  const handleSolicitarAcesso = async (intervencaoId: string) => {
+    setSolicitandoAcesso(true);
+    setSolicitacaoResultado(null);
+    try {
+      const response = await fetch(`${API_BASE}/${intervencaoId}/request-access/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          intervencao_id: intervencaoId,
+          tipo: 'acesso',
+          justificativa: 'Solicitação de acesso ao atendimento via sistema'
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setSolicitacaoResultado({ tipo: 'sucesso', mensagem: result.message || 'Solicitação enviada para aprovação' });
+      } else {
+        setSolicitacaoResultado({ tipo: 'erro', mensagem: result.erro || 'Erro ao solicitar acesso' });
+      }
+    } catch (error: any) {
+      setSolicitacaoResultado({ tipo: 'erro', mensagem: error.message || 'Erro de rede' });
+    } finally {
+      setSolicitandoAcesso(false);
+    }
+  };
+
+  const handleAssumirTicket = async (intervencaoId: string) => {
+    setAssumindoTicket(true);
+    setSolicitacaoResultado(null);
+    try {
+      const response = await fetch(`${API_BASE}/${intervencaoId}/assume/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setSolicitacaoResultado({ tipo: 'sucesso', mensagem: result.message || 'Ticket assumido com sucesso!' });
+        // Recarregar detalhes após assumir
+        if (handleVerDetalhes) handleVerDetalhes(intervencaoId);
+      } else {
+        setSolicitacaoResultado({ tipo: 'erro', mensagem: result.erro || 'Erro ao assumir ticket' });
+      }
+    } catch (error: any) {
+      setSolicitacaoResultado({ tipo: 'erro', mensagem: error.message || 'Erro de rede' });
+    } finally {
+      setAssumindoTicket(false);
+    }
+  };
+
+  const fecharResultadoSolicitacao = () => {
+    setSolicitacaoResultado(null);
+  };
+
   // Regista o refetch da lista para o gesto de "puxar para atualizar" do shell.
   useEffect(() => {
     registarAoAtualizar(onAtualizar || null);
@@ -132,6 +216,7 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
   const [segundosGravacao, setSegundosGravacao] = useState(0);
   const [erroAudio, setErroAudio] = useState<string | null>(null);
   const [visualizador, setVisualizador] = useState<{ lista: { url: string; nome?: string }[]; indice: number } | null>(null);
+  const [adminModalAberto, setAdminModalAberto] = useState(false);
   const fimDaThreadRef = useRef<HTMLDivElement>(null);
   const inputAnexoRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -399,6 +484,18 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
                   >
                     <Trash2 className="w-4 h-4" /> Remover
                   </button>
+
+                  {/* Admin: Gerenciar solicitações de acesso */}
+                  <div className="border-t border-gray-50 pt-3 mt-3 mb-1">
+                    <button
+                      onClick={() => { setMenuAberto(false); setAdminModalAberto(true); }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold ${podeEditar ? 'text-[#630ed4] hover:bg-purple-50' : 'text-gray-400 cursor-not-allowed'}`}
+                      disabled={!podeEditar}
+                    >
+                      <Mail className="w-4 h-4" />
+                      {podeEditar ? 'Ver Solicitações Pendentes' : 'Apenas Admin'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -411,12 +508,54 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
             <MetaItem label="Responsável" valor={intervencaoDetalhe.tecnico_nome || 'Aguardando atribuição'} />
             <MetaItem label="Aberto em" valor={intervencaoDetalhe.data_abertura ? new Date(intervencaoDetalhe.data_abertura).toLocaleDateString('pt-PT') : '-'} />
             <MetaItem label="Prioridade" valor={priorityStyle(intervencaoDetalhe.prioridade).label} />
+
+            {/* Status do Ticket + Solicitação de Acesso */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#f3f4f6] border border-[#e5e7eb]">
+              {intervencaoDetalhe.tecnico_nome ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-medium text-emerald-700">Atribuído</span>
+                  <button
+                    onClick={() => handleSolicitarAcesso(intervencaoDetalhe.id)}
+                    title="Solicitar acesso a este atendimento"
+                    className="text-xs px-2 py-1 bg-white border border-[#e5e7eb] rounded hover:bg-[#50ca7c] text-[#1e293b] font-medium transition-colors"
+                  >
+                    Solicitar Acesso
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span className="text-xs font-medium text-amber-700">Livre - Disponível</span>
+                  <button
+                    onClick={() => handleAssumirTicket(intervencaoDetalhe.id)}
+                    title="Assumir este atendimento"
+                    className="text-xs px-2 py-1 bg-[#50ca7c] text-white rounded hover:bg-[#40b26a] font-medium transition-colors"
+                  >
+                    Assumir Ticket
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
         {!podeEditar && (
           <div className="flex-shrink-0 px-4 py-1.5 bg-amber-50 border-b border-amber-100 text-[11px] font-semibold text-amber-700 text-center">
             Este atendimento só pode ser editado ou removido enquanto estiver em aberto.
+          </div>
+        )}
+
+        {/* Resultado da solicitação de acesso */}
+        {solicitacaoResultado && (
+          <div className={`flex-shrink-0 px-4 py-2 rounded-lg border ${solicitacaoResultado.tipo === 'sucesso' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+            <span className="text-xs font-semibold">{solicitacaoResultado.mensagem}</span>
+            <button
+              onClick={fecharResultadoSolicitacao}
+              className="ml-2 text-xs hover:underline"
+            >
+              Fechar
+            </button>
           </div>
         )}
 
@@ -619,6 +758,17 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
             onNavegar={(indice) => setVisualizador((v) => (v ? { ...v, indice } : v))}
           />
         )}
+
+        {/* Admin: Modal de Solicitações Pendentes */}
+        {adminModalAberto && (
+          <TicketRequestsAdmin
+            onClose={() => setAdminModalAberto(false)}
+            onRequestApproved={(intervencaoId, tecnicoId) => {
+              // Recarregar detalhes após aprovação
+              if (handleVerDetalhes) handleVerDetalhes(String(intervencaoId));
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -631,6 +781,50 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
           <h2 className="cliente-font-heading text-2xl font-bold text-[#191c1e]">Atendimentos</h2>
           <p className="text-sm text-[#4a4455] mt-0.5">Acompanhe os seus pedidos de suporte</p>
         </div>
+        {/* Idioma - visível em desktop (≥ md) */}
+        <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-[#f3f4f6] rounded-full text-sm">
+          <span className="text-[#6b7280] select-none">Língua:</span>
+          <div className="relative">
+            <button
+              onClick={() => setLanguage((l) => (l === 'pt' ? 'en' : 'pt'))}
+              className="relative flex items-center rounded-md px-3 py-2 text-sm font-medium text-[#3f3f4f] hover:text-[#1e293b] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#3b82f6]"
+              aria-haspopup="menu"
+              aria-label="Selecionar idioma"
+            >
+              {language.code === 'pt' ? 'Português' : 'English'}
+              <svg className="w-3 h-3 ml-2 opacity-6" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            {language.code === 'pt'
+              ? (
+                <Menu className="mt-2 w-40 rounded-md bg-white shadow-lg p-1 z-10">
+                  <MenuContent>
+                    <MenuItem onClick={() => setLanguage({ code: 'pt', name: 'Português', native: 'Português' })}>Português</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'en', name: 'English', native: 'English' })}>English</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'zh', name: '中文 (Mandarim)', native: '中文 (普通话)' })}>中文 (Mandarim)</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'fr', name: 'Français', native: 'Français' })}>Français</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'ar', name: 'Arbëresh', native: 'Arbërisht' })}>Arbëresh</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'th', name: 'Tailandês', native: 'ไทย' })}>Tailandês</MenuItem>
+                  </MenuContent>
+                </Menu>
+              )
+              : (
+                <Menu className="mt-2 w-40 rounded-md bg-white shadow-lg p-1 z-10">
+                  <MenuContent>
+                    <MenuItem onClick={() => setLanguage({ code: 'en', name: 'English', native: 'English' })}>English</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'pt', name: 'Português', native: 'Português' })}>Português</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'zh', name: '中文', native: '中文' })}>中文</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'fr', name: 'Français', native: 'Français' })}>Français</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'ar', name: 'Albanian', native: 'Albanian' })}>Albanian</MenuItem>
+                    <MenuItem onClick={() => setLanguage({ code: 'th', name: 'Thai', native: 'Thai' })}>Thai</MenuItem>
+                  </MenuContent>
+                </Menu>
+              )
+            }
+          </div>
+        </div>
+
         {/* Botão Nova Intervenção visível em desktop (≥ md) */}
         <button
           onClick={abrirComposer}
@@ -640,6 +834,18 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
           Nova Intervenção
         </button>
       </div>
+
+      {/* Botão Permitir Notificações - visível em desktop */}
+      {isSupported && (
+        <button
+          onClick={() => register()}
+          className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-[#059669] text-white text-sm font-bold rounded-full shadow-lg shadow-[#059669]/25 hover:bg-[#10b981] transition-all"
+          title="Permitir notificações"
+        >
+          <Notification className="w-4 h-4" />
+          {permission === 'default' ? 'Permitir' : permission === 'granted' ? 'Ativado' : 'Bloqueado'}
+        </button>
+      )}
 
       {/* Barra de pesquisa + filtro */}
       <div className="flex items-center gap-2">
