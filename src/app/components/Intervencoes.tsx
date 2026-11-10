@@ -9,6 +9,7 @@ import { formatarHoras } from '../utils/formatters';
 import { ClienteIntervencoesView } from './cliente/ClienteIntervencoesView';
 import { IntervencaoWhatsApp } from './IntervencaoWhatsApp';
 import { WhatsAppInbox } from './WhatsAppInbox';
+import { ApchatInbox } from './ApchatInbox';
 import {
   Search,
   Plus,
@@ -148,7 +149,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const [novoComentario, setNovoComentario] = useState('');
   const [abaChat, setAbaChat] = useState<'ticket' | 'whatsapp' | 'apchat'>('apchat');
   const fimChatRef = useRef<HTMLDivElement>(null);
-  const [abaPrincipal, setAbaPrincipal] = useState<'tickets' | 'whatsapp'>('tickets');
+  const [abaPrincipal, setAbaPrincipal] = useState<'tickets' | 'whatsapp' | 'apchat'>('tickets');
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
   const [visualizadorAnexo, setVisualizadorAnexo] = useState<{ url: string; nome: string; lista: { url: string; nome: string }[]; indice: number } | null>(null);
   const [exibirModalAtribuir, setExibirModalAtribuir] = useState(false);
@@ -1016,7 +1017,21 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         >
           <MessageSquare className="w-4 h-4" /> WhatsApp
         </button>
+        <button
+          type="button"
+          onClick={() => setAbaPrincipal('apchat')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${abaPrincipal === 'apchat' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+        >
+          <MessageSquare className="w-4 h-4" /> apchat
+        </button>
       </div>
+
+      {abaPrincipal === 'apchat' && (
+        <ApchatInbox
+          usuarioNome={usuario?.nome}
+          onTicketCriado={() => carregarIntervencoes(true)}
+        />
+      )}
 
       {abaPrincipal === 'whatsapp' && (
         <WhatsAppInbox
