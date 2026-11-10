@@ -241,6 +241,7 @@ export function ApchatInbox({
   const [gravando, setGravando] = useState(false);
   const [segundosGravacao, setSegundosGravacao] = useState(0);
   const [erroAudio, setErroAudio] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<Record<string, any[]>>({});
   const fimRef = useRef<HTMLDivElement>(null);
   const inputAnexoRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -271,6 +272,43 @@ export function ApchatInbox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervaloListaMs]);
 
+  // A lista de atendimentos não traz comentários: busca o detalhe de cada um
+  // para mostrar a última mensagem e o contador na lista de clientes.
+  const chaveIdsAtendimentos = intervencoes
+    .map((i) => i.id)
+    .filter(Boolean)
+    .slice(0, 40)
+    .join('|');
+
+  useEffect(() => {
+    const ids = chaveIdsAtendimentos ? chaveIdsAtendimentos.split('|') : [];
+    if (ids.length === 0) return;
+
+    let cancelado = false;
+    const buscar = async () => {
+      const resultados = await Promise.allSettled(
+        ids.map((id) => intervencoesService.obterPorId(id)),
+      );
+      if (cancelado) return;
+      setPreviews((prev) => {
+        const novo = { ...prev };
+        resultados.forEach((r, idx) => {
+          if (r.status === 'fulfilled') {
+            novo[ids[idx]] = comentariosDe(r.value as any);
+          }
+        });
+        return novo;
+      });
+    };
+
+    buscar();
+    const timer = setInterval(buscar, 45_000);
+    return () => {
+      cancelado = true;
+      clearInterval(timer);
+    };
+  }, [chaveIdsAtendimentos]);
+
   // cliente_id -> atendimento mais recente
   const intervencaoPorCliente = useMemo(() => {
     const mapa = new Map<string, Intervencao>();
@@ -290,6 +328,7 @@ export function ApchatInbox({
     try {
       const d = await intervencoesService.obterPorId(intervencaoId);
       setDetalhe(d);
+      setPreviews((prev) => ({ ...prev, [intervencaoId]: comentariosDe(d) }));
     } catch {
       // silencioso
     } finally {
@@ -326,7 +365,7 @@ export function ApchatInbox({
     return clientes
       .map((cliente) => {
         const intervencao = intervencaoPorCliente.get(cliente.id);
-        const coms = comentariosDe(intervencao);
+        const coms = (intervencao && previews[intervencao.id]) || comentariosDe(intervencao);
         const ultimo = coms[coms.length - 1];
         return { cliente, intervencao, coms, ultimo };
       })
@@ -354,7 +393,7 @@ export function ApchatInbox({
         if (db) return 1;
         return String(a.cliente.nome || '').localeCompare(String(b.cliente.nome || ''));
       });
-  }, [clientes, intervencaoPorCliente, pesquisa]);
+  }, [clientes, intervencaoPorCliente, previews, pesquisa]);
 
   const totalComMensagens = linhas.filter((l) => l.coms.length > 0).length;
   const comentarios = detalhe?.comentarios || [];
