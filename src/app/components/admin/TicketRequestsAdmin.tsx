@@ -144,37 +144,6 @@ export function TicketRequestsAdmin({ onClose, onRequestApproved }: AdminProps) 
     rejeitado: requests.filter((r) => r.status === 'rejeitado').length,
   };
 
-  // Status label em português
-  const statusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      pendente: 'Pendente',
-      aprovado: 'Aprovado',
-      rejeitado: 'Rejeitado',
-    };
-    return labels[status] || status;
-  };
-
-  // Status cor
-  const statusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      pendente: 'bg-amber-100 text-amber-700',
-      aprovado: 'bg-emerald-100 text-emerald-700',
-      rejeitado: 'bg-red-100 text-red-700',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-700';
-  };
-
-  // Tipo label
-  const tipoLabel = (tipo: string) => {
-    const labels: Record<string, string> = {
-      acesso: 'Acesso ao Ticket',
-      backup: 'Solicitar Backup',
-      prioridade: 'Alterar Prioridade',
-      reasignar: 'Reatribuir Técnico',
-    };
-    return labels[tipo] || tipo;
-  };
-
   if (loading) {
     return (
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
@@ -349,6 +318,35 @@ export function TicketRequestsAdmin({ onClose, onRequestApproved }: AdminProps) 
   );
 }
 
+// Helpers de apresentação (nível do módulo, usados pelo Badge)
+function statusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pendente: 'Pendente',
+    aprovado: 'Aprovado',
+    rejeitado: 'Rejeitado',
+  };
+  return labels[status] || status;
+}
+
+function statusColor(status: string) {
+  const colors: Record<string, string> = {
+    pendente: 'bg-amber-100 text-amber-700',
+    aprovado: 'bg-emerald-100 text-emerald-700',
+    rejeitado: 'bg-red-100 text-red-700',
+  };
+  return colors[status] || 'bg-gray-100 text-gray-700';
+}
+
+function tipoLabel(tipo: string) {
+  const labels: Record<string, string> = {
+    acesso: 'Acesso ao Ticket',
+    backup: 'Solicitar Backup',
+    prioridade: 'Alterar Prioridade',
+    reasignar: 'Reatribuir Técnico',
+  };
+  return labels[tipo] || tipo;
+}
+
 // Componente auxiliar para Badge
 function Badge({ tipo, status }: { tipo?: string; status?: string }) {
   if (tipo) {
@@ -373,7 +371,3 @@ function Badge({ tipo, status }: { tipo?: string; status?: string }) {
   }
   return null;
 }
-
-Badge.prototype.tipoLabel = tipoLabel;
-Badge.prototype.statusLabel = statusLabel;
-Badge.prototype.statusColor = statusColor;
