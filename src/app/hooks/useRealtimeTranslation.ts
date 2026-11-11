@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 // Language codes mapping
 const LANGUAGE_MAP: Record<string, string> = {
@@ -6,7 +6,7 @@ const LANGUAGE_MAP: Record<string, string> = {
   en: 'english',
   zh: 'mandarin',
   fr: 'french',
-  ar: 'arabic',
+  ar: 'Arbëresh (Albanian dialect)',
   th: 'thai',
   alb: 'albanian',
 };
@@ -111,7 +111,7 @@ function getFromCache(key: string): TranslationResult | null {
 }
 
 // Translate using fallback dictionary
-function fallbackTranslate(text: string, from: 'pt' | 'en', to: 'pt' | 'en'): string {
+function fallbackTranslate(text: string, from: string, to: string): string {
   // Determine dictionary key
   const dictKey = `${from}-${to}` as keyof typeof FALLBACK_TRANSLATIONS;
   const dict = FALLBACK_TRANSLATIONS[dictKey];
@@ -182,7 +182,7 @@ class DeepseekClient {
     this.model = config.model || 'deepseek-chat';
   }
 
-  async translate(text: string, from: 'pt' | 'en', to: 'pt' | 'en'): Promise<{ translated: string; success: boolean }> {
+  async translate(text: string, from: string, to: string): Promise<{ translated: string; success: boolean }> {
     if (!text || text.trim() === '') {
       return { translated: text, success: true };
     }
@@ -204,7 +204,9 @@ class DeepseekClient {
           messages: [
             {
               role: 'system',
-              content: `Translate the following text from ${from} to ${to}. Provide only the translation, no explanations.`,
+              content: LANGUAGE_MAP[from]
+                ? `Translate the following text from ${LANGUAGE_MAP[from]} to ${LANGUAGE_MAP[to] || to}. Provide only the translation, no explanations.`
+                : `Detect the language of the following text and translate it to ${LANGUAGE_MAP[to] || to}. Provide only the translation, no explanations.`,
             },
             {
               role: 'user',
@@ -243,7 +245,7 @@ export function useDeepseekTranslation(apiKey?: string, model?: string) {
   const [isConfigured, setIsConfigured] = useState(!!apiKey);
   const deepseek = useRef<DeepseekClient>(new DeepseekClient({ apiKey: apiKey, model }));
 
-  const translate = useCallback(async (text: string, from: 'pt' | 'en', to: 'pt' | 'en') => {
+  const translate = useCallback(async (text: string, from: string, to: string) => {
     if (!text || text.trim() === '') {
       return { translated: '', success: true };
     }
@@ -270,8 +272,36 @@ export function useDeepseekTranslation(apiKey?: string, model?: string) {
 }
 
 // Main translation hook
+const AUTO_TRANSLATE_KEY = 'sosticket_auto_translate';
+const LANGUAGE_KEY = 'sosticket_language';
+
 export function useRealtimeTranslation(deepseekApiKey?: string, deepseekModel?: string) {
-  const [language, setLanguage] = useState<SupportedLanguage>(DEFAULT_LANGUAGE);
+  const [language, setLanguageState] = useState<SupportedLanguage>(() => {
+    try {
+      const guardado = localStorage.getItem(LANGUAGE_KEY);
+      return SUPPORTED_LANGUAGES.find((l) => l.code === guardado) || DEFAULT_LANGUAGE;
+    } catch {
+      return DEFAULT_LANGUAGE;
+    }
+  });
+
+  // Persiste o idioma escolhido pelo utilizador
+  const setLanguage = useCallback((value: SupportedLanguage) => {
+    setLanguageState(value);
+    try {
+      localStorage.setItem(LANGUAGE_KEY, value.code);
+    } catch {
+      // localStorage indisponível — mantém apenas em memória
+    }
+  }, []);
+
+  const [autoTranslate, setAutoTranslateState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(AUTO_TRANSLATE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [translationResult, setTranslationResult] = useState<TranslationResult>({
     original: '',
     translated: '',
@@ -279,6 +309,16 @@ export function useRealtimeTranslation(deepseekApiKey?: string, deepseekModel?: 
     toLang: DEFAULT_LANGUAGE,
     status: 'idle',
   });
+
+  // Persiste a escolha de tradução automática do utilizador
+  const setAutoTranslate = useCallback((value: boolean) => {
+    setAutoTranslateState(value);
+    try {
+      localStorage.setItem(AUTO_TRANSLATE_KEY, value ? '1' : '0');
+    } catch {
+      // localStorage indisponível — mantém apenas em memória
+    }
+  }, []);
 
   // Deepseek translation hook
   const { isConfigured: deepseekConfigured, translate: deepseekTranslate } = useDeepseekTranslation(
@@ -300,15 +340,15 @@ export function useRealtimeTranslation(deepseekApiKey?: string, deepseekModel?: 
     }
 
     // Determine languages based on direction and current language
-    let fromLang: 'pt' | 'en';
-    let toLang: 'pt' | 'en';
+    let fromLang: string;
+    let toLang: string;
 
     if (direction === 'pt-to-client') {
       fromLang = 'pt';
-      toLang = language.code === 'pt' ? 'pt' : 'en';
+      toLang = language.code;
     } else {
-      fromLang = 'en';
-      toLang = language.code === 'en' ? 'en' : 'pt';
+      fromLang = language.code === 'pt' ? 'en' : language.code;
+      toLang = 'pt';
     }
 
     // Check cache first
@@ -360,6 +400,49 @@ export function useRealtimeTranslation(deepseekApiKey?: string, deepseekModel?: 
     setTranslationResult(result);
   }, [language, deepseekConfigured, deepseekTranslate]);
 
+  // Tradução directa de um texto para o idioma seleccionado (usada pelo chat).
+  // Devolve sempre uma string e reutiliza a cache para não repetir chamadas à API.
+  const translateText = useCallback(async (
+    text: string,
+    fromCode: string = 'pt',
+    toCode: string = language.code
+  ): Promise<string> => {
+    if (!text || !text.trim()) return text;
+
+    // Se origem e destino coincidem, deixa o Deepseek detectar o idioma de origem.
+    const origem = fromCode === toCode ? 'auto' : fromCode;
+
+    const cacheKey = `${text}-auto-${origem}-${toCode}`;
+    const cached = getFromCache(cacheKey);
+    if (cached?.translated) return cached.translated;
+
+    let translated = text;
+    let usedDeepseek = false;
+
+    try {
+      const result = await deepseekTranslate(text, origem, toCode);
+      if (result.success && deepseekConfigured) {
+        translated = result.translated;
+        usedDeepseek = true;
+      } else {
+        translated = fallbackTranslate(text, origem, toCode);
+      }
+    } catch {
+      translated = fallbackTranslate(text, origem, toCode);
+    }
+
+    addToCache(cacheKey, {
+      original: text,
+      translated,
+      fromLang: language,
+      toLang: DEFAULT_LANGUAGE,
+      status: 'translated',
+      usedDeepseek,
+    });
+
+    return translated;
+  }, [language, deepseekConfigured, deepseekTranslate]);
+
   // Auto-translate when language changes (manual trigger needed)
   useEffect(() => {
     // No auto-translate on init - user must trigger via translate() call
@@ -377,9 +460,12 @@ export function useRealtimeTranslation(deepseekApiKey?: string, deepseekModel?: 
     setLanguage,
     translationResult,
     translate,
+    translateText,
+    autoTranslate,
+    setAutoTranslate,
     getDirection,
     supportedLanguages: SUPPORTED_LANGUAGES,
-    isTranslating: translationResult.status === 'translating' || translationResult.status === 'translated',
+    isTranslating: translationResult.status === 'translating',
     isError: translationResult.status === 'error',
     isFallback: translationResult.status === 'fallback',
     deepseekConfigured,

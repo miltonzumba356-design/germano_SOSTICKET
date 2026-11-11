@@ -5,7 +5,7 @@ import {
   CheckCircle2, AlertCircle, FileText, Film, MessageCircle,
   Pencil, Trash2, Clock, ArrowLeft, SlidersHorizontal, Check,
   Bot, ClipboardList, UploadCloud, Image as ImageIcon,
-  Download, ChevronLeft, ChevronRight, Music, Mic,
+  Download, ChevronLeft, ChevronRight, Music, Mic, Languages, Bell,
 } from 'lucide-react';
 import { usePushNotifications } from "@/app/hooks/usePushNotifications";
 import { useRealtimeTranslation } from "@/app/hooks/useRealtimeTranslation";
@@ -130,6 +130,9 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
     setLanguage,
     translationResult,
     translate,
+    translateText,
+    autoTranslate,
+    setAutoTranslate,
     getDirection,
     supportedLanguages,
     isTranslating,
@@ -137,6 +140,37 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
     isFallback,
     deepseekConfigured,
   } = useRealtimeTranslation('sk-6c52be78ffeb4bde8d5066b4ac90a439');
+
+  // ── Tradução automática das mensagens do chat ────────────────────────
+  const [traducoes, setTraducoes] = useState<Record<string, string>>({});
+  const traducoesPedidasRef = useRef<Set<string>>(new Set());
+
+  const chaveTraducao = (texto?: string) => `${language.code}:${texto || ''}`;
+
+  useEffect(() => {
+    if (!autoTranslate || !intervencaoDetalhe) return;
+
+    const textos = [
+      intervencaoDetalhe.descricao,
+      ...((intervencaoDetalhe.comentarios || []) as any[]).map((c) => c.texto),
+    ].filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
+
+    textos.forEach((texto) => {
+      const chave = chaveTraducao(texto);
+      if (traducoesPedidasRef.current.has(chave)) return;
+      traducoesPedidasRef.current.add(chave);
+
+      translateText(texto, 'auto', language.code)
+        .then((traduzido) => {
+          if (traduzido && traduzido !== texto) {
+            setTraducoes((prev) => ({ ...prev, [chave]: traduzido }));
+          }
+        })
+        .catch(() => {
+          traducoesPedidasRef.current.delete(chave);
+        });
+    });
+  }, [autoTranslate, language.code, intervencaoDetalhe, translateText]);
 
   // ── Sistema de Solicitação de Acesso a Tickets ───────────────────────
   const [solicitandoAcesso, setSolicitandoAcesso] = useState(false);
@@ -509,6 +543,19 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
             <MetaItem label="Aberto em" valor={intervencaoDetalhe.data_abertura ? new Date(intervencaoDetalhe.data_abertura).toLocaleDateString('pt-PT') : '-'} />
             <MetaItem label="Prioridade" valor={priorityStyle(intervencaoDetalhe.prioridade).label} />
 
+            {/* Tradução automática dentro do chat (Deepseek) */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#faf7ff] border border-[#ede4fd]">
+              <ControleTraducao
+                compact
+                language={language}
+                setLanguage={setLanguage}
+                supportedLanguages={supportedLanguages}
+                autoTranslate={autoTranslate}
+                setAutoTranslate={setAutoTranslate}
+                deepseekConfigured={deepseekConfigured}
+              />
+            </div>
+
             {/* Status do Ticket + Solicitação de Acesso */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#f3f4f6] border border-[#e5e7eb]">
               {intervencaoDetalhe.tecnico_nome ? (
@@ -594,6 +641,7 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
               <MensagemBolha
                 autor={intervencaoDetalhe.cliente_nome || usuario?.nome}
                 texto={intervencaoDetalhe.descricao}
+                traducao={autoTranslate ? traducoes[chaveTraducao(intervencaoDetalhe.descricao)] : undefined}
                 data={intervencaoDetalhe.data_abertura}
                 minha
                 rotulo="Solicitação inicial"
@@ -629,6 +677,7 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
                     key={`msg-${i}`}
                     autor={item.com.usuario_nome}
                     texto={item.com.texto}
+                    traducao={autoTranslate ? traducoes[chaveTraducao(item.com.texto)] : undefined}
                     data={item.com.data_criacao}
                     minha={item.com.usuario_nome === usuario?.nome}
                     repetida={
@@ -781,49 +830,15 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
           <h2 className="cliente-font-heading text-2xl font-bold text-[#191c1e]">Atendimentos</h2>
           <p className="text-sm text-[#4a4455] mt-0.5">Acompanhe os seus pedidos de suporte</p>
         </div>
-        {/* Idioma - visível em desktop (≥ md) */}
-        <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-[#f3f4f6] rounded-full text-sm">
-          <span className="text-[#6b7280] select-none">Língua:</span>
-          <div className="relative">
-            <button
-              onClick={() => setLanguage((l) => (l === 'pt' ? 'en' : 'pt'))}
-              className="relative flex items-center rounded-md px-3 py-2 text-sm font-medium text-[#3f3f4f] hover:text-[#1e293b] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#3b82f6]"
-              aria-haspopup="menu"
-              aria-label="Selecionar idioma"
-            >
-              {language.code === 'pt' ? 'Português' : 'English'}
-              <svg className="w-3 h-3 ml-2 opacity-6" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-            {language.code === 'pt'
-              ? (
-                <Menu className="mt-2 w-40 rounded-md bg-white shadow-lg p-1 z-10">
-                  <MenuContent>
-                    <MenuItem onClick={() => setLanguage({ code: 'pt', name: 'Português', native: 'Português' })}>Português</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'en', name: 'English', native: 'English' })}>English</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'zh', name: '中文 (Mandarim)', native: '中文 (普通话)' })}>中文 (Mandarim)</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'fr', name: 'Français', native: 'Français' })}>Français</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'ar', name: 'Arbëresh', native: 'Arbërisht' })}>Arbëresh</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'th', name: 'Tailandês', native: 'ไทย' })}>Tailandês</MenuItem>
-                  </MenuContent>
-                </Menu>
-              )
-              : (
-                <Menu className="mt-2 w-40 rounded-md bg-white shadow-lg p-1 z-10">
-                  <MenuContent>
-                    <MenuItem onClick={() => setLanguage({ code: 'en', name: 'English', native: 'English' })}>English</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'pt', name: 'Português', native: 'Português' })}>Português</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'zh', name: '中文', native: '中文' })}>中文</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'fr', name: 'Français', native: 'Français' })}>Français</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'ar', name: 'Albanian', native: 'Albanian' })}>Albanian</MenuItem>
-                    <MenuItem onClick={() => setLanguage({ code: 'th', name: 'Thai', native: 'Thai' })}>Thai</MenuItem>
-                  </MenuContent>
-                </Menu>
-              )
-            }
-          </div>
-        </div>
+        {/* Idioma + tradução automática (desktop) */}
+        <ControleTraducao
+          language={language}
+          setLanguage={setLanguage}
+          supportedLanguages={supportedLanguages}
+          autoTranslate={autoTranslate}
+          setAutoTranslate={setAutoTranslate}
+          deepseekConfigured={deepseekConfigured}
+        />
 
         {/* Botão Nova Intervenção visível em desktop (≥ md) */}
         <button
@@ -842,7 +857,7 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
           className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-[#059669] text-white text-sm font-bold rounded-full shadow-lg shadow-[#059669]/25 hover:bg-[#10b981] transition-all"
           title="Permitir notificações"
         >
-          <Notification className="w-4 h-4" />
+          <Bell className="w-4 h-4" />
           {permission === 'default' ? 'Permitir' : permission === 'granted' ? 'Ativado' : 'Bloqueado'}
         </button>
       )}
@@ -973,9 +988,80 @@ function MetaItem({ label, valor }: { label: string; valor?: string }) {
   );
 }
 
+export function ControleTraducao({
+  language, setLanguage, supportedLanguages, autoTranslate, setAutoTranslate, deepseekConfigured, compact,
+}: {
+  language: any;
+  setLanguage: (l: any) => void;
+  supportedLanguages: readonly any[];
+  autoTranslate: boolean;
+  setAutoTranslate: (v: boolean) => void;
+  deepseekConfigured?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-2 ${
+        compact ? '' : 'hidden md:flex px-4 py-2 bg-[#f3f4f6] rounded-full'
+      }`}
+    >
+      <Languages className="w-4 h-4 text-[#6b7280] shrink-0" />
+      <select
+        value={language.code}
+        onChange={(e) => {
+          const escolhida = supportedLanguages.find((l) => l.code === e.target.value);
+          if (escolhida) setLanguage(escolhida);
+        }}
+        className="bg-transparent text-xs font-semibold text-[#3f3f4f] outline-none cursor-pointer max-w-[120px]"
+        aria-label="Idioma das mensagens"
+        title="Idioma para tradução das mensagens"
+      >
+        {supportedLanguages.map((l) => (
+          <option key={l.code} value={l.code}>
+            {l.name}
+          </option>
+        ))}
+      </select>
+
+      <span className="w-px h-4 bg-[#d1d5db]" />
+
+      <button
+        type="button"
+        onClick={() => setAutoTranslate(!autoTranslate)}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+          autoTranslate
+            ? 'bg-[#630ed4] text-white'
+            : 'bg-white text-[#4a4455] border border-[#e5e7eb]'
+        }`}
+        title="Ligar/desligar tradução automática das mensagens (Deepseek)"
+        aria-pressed={autoTranslate}
+      >
+        <span
+          className={`w-1.5 h-1.5 rounded-full ${
+            autoTranslate ? 'bg-emerald-300' : 'bg-gray-400'
+          }`}
+        />
+        Tradução {autoTranslate ? 'ON' : 'OFF'}
+      </button>
+
+      {autoTranslate && (
+        <span
+          className="text-[10px] font-bold text-[#630ed4] uppercase tracking-wide"
+          title={deepseekConfigured ? 'Tradução feita pelo Deepseek' : 'Deepseek indisponível: usando dicionário local'}
+        >
+          {deepseekConfigured ? 'Deepseek' : 'Offline'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function MensagemBolha({
-  autor, texto, data, minha, rotulo, repetida,
-}: { autor?: string; texto?: string; data?: string | null; minha: boolean; rotulo?: string; repetida?: boolean }) {
+  autor, texto, data, minha, rotulo, repetida, traducao,
+}: {
+  autor?: string; texto?: string; data?: string | null; minha: boolean;
+  rotulo?: string; repetida?: boolean; traducao?: string;
+}) {
   return (
     <div className={`flex ${minha ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[82%] ${minha ? 'items-end' : 'items-start'} flex flex-col`}>
@@ -993,6 +1079,18 @@ function MensagemBolha({
           }`}
         >
           <p className="whitespace-pre-wrap break-words">{texto}</p>
+          {traducao && (
+            <p
+              className={`mt-2 pt-2 border-t text-[13px] whitespace-pre-wrap break-words ${
+                minha ? 'border-white/25 text-white/90' : 'border-[#dbe3ec] text-[#4a4455]'
+              }`}
+            >
+              <span className="block text-[9px] font-bold uppercase tracking-widest opacity-70 mb-0.5">
+                Tradução · Deepseek
+              </span>
+              {traducao}
+            </p>
+          )}
         </div>
         <span className="flex items-center gap-1 text-[10px] text-[#4a4455] mt-1 mx-1">
           {data ? new Date(data).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}

@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import type { Cliente, Intervencao } from '../types/api';
 import { clientesService, intervencoesService } from '../services/api';
+import { useRealtimeTranslation } from '../hooks/useRealtimeTranslation';
+import { ControleTraducao } from './cliente/ClienteIntervencoesView';
 
 // apchat — chat interno com o mesmo modelo do WhatsApp:
 // lista de clientes à esquerda + conversa à direita + criar ticket na conversa.
@@ -257,6 +259,47 @@ export function ApchatInbox({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksAudioRef = useRef<Blob[]>([]);
   const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Tradução em tempo real com Deepseek (apchat)
+  const {
+    language,
+    setLanguage,
+    translateText,
+    autoTranslate,
+    setAutoTranslate,
+    supportedLanguages,
+    deepseekConfigured,
+  } = useRealtimeTranslation('sk-6c52be78ffeb4bde8d5066b4ac90a439');
+
+  const [traducoes, setTraducoes] = useState<Record<string, string>>({});
+  const traducoesPedidasRef = useRef<Set<string>>(new Set());
+
+  const chaveTraducao = (texto?: string) => `${language.code}:${texto || ''}`;
+
+  useEffect(() => {
+    if (!autoTranslate || !detalhe) return;
+
+    const textos = [
+      detalhe.descricao,
+      ...((detalhe.comentarios || []) as any[]).map((c) => c.texto),
+    ].filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
+
+    textos.forEach((texto) => {
+      const chave = chaveTraducao(texto);
+      if (traducoesPedidasRef.current.has(chave)) return;
+      traducoesPedidasRef.current.add(chave);
+
+      translateText(texto, 'auto', language.code)
+        .then((traduzido) => {
+          if (traduzido && traduzido !== texto) {
+            setTraducoes((prev) => ({ ...prev, [chave]: traduzido }));
+          }
+        })
+        .catch(() => {
+          traducoesPedidasRef.current.delete(chave);
+        });
+    });
+  }, [autoTranslate, language.code, detalhe, translateText]);
 
   const carregarLista = async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
@@ -750,6 +793,15 @@ export function ApchatInbox({
                       )}
                     </div>
                   </div>
+                  <ControleTraducao
+                    compact
+                    language={language}
+                    setLanguage={setLanguage}
+                    supportedLanguages={supportedLanguages}
+                    autoTranslate={autoTranslate}
+                    setAutoTranslate={setAutoTranslate}
+                    deepseekConfigured={deepseekConfigured}
+                  />
                   <button
                     type="button"
                     onClick={abrirModalTicket}
@@ -807,6 +859,14 @@ export function ApchatInbox({
                               <p className="text-sm font-medium whitespace-pre-wrap break-words">
                                 {item.dado.descricao}
                               </p>
+                              {autoTranslate && traducoes[chaveTraducao(item.dado.descricao)] && (
+                                <p className="mt-2 pt-2 border-t border-gray-200 text-[13px] text-gray-600 whitespace-pre-wrap break-words">
+                                  <span className="block text-[9px] font-bold uppercase tracking-widest text-theme-primary/70 mb-0.5">
+                                    Tradução · Deepseek
+                                  </span>
+                                  {traducoes[chaveTraducao(item.dado.descricao)]}
+                                </p>
+                              )}
                               <p className="text-[10px] mt-1 text-right text-gray-400">
                                 {horaMensagem(item.data)}
                               </p>
@@ -832,6 +892,18 @@ export function ApchatInbox({
                               </p>
                             )}
                             <p className="text-sm font-medium whitespace-pre-wrap break-words">{com.texto}</p>
+                            {autoTranslate && traducoes[chaveTraducao(com.texto)] && (
+                              <p
+                                className={`mt-2 pt-2 border-t text-[13px] whitespace-pre-wrap break-words ${
+                                  meu ? 'border-white/25 text-white/90' : 'border-gray-200 text-gray-600'
+                                }`}
+                              >
+                                <span className={`block text-[9px] font-bold uppercase tracking-widest mb-0.5 ${meu ? 'text-white/70' : 'text-theme-primary/70'}`}>
+                                  Tradução · Deepseek
+                                </span>
+                                {traducoes[chaveTraducao(com.texto)]}
+                              </p>
+                            )}
                             <p
                               className={`text-[10px] mt-1 text-right ${
                                 meu ? 'text-indigo-200' : 'text-gray-400'

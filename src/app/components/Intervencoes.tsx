@@ -6,7 +6,8 @@ import { intervencoesService, contratosService, clientesService, tecnicosService
 import { useAuth } from '../contexts/AuthContext';
 import { useCronometro } from '../contexts/CronometroContext';
 import { formatarHoras } from '../utils/formatters';
-import { ClienteIntervencoesView } from './cliente/ClienteIntervencoesView';
+import { ClienteIntervencoesView, ControleTraducao } from './cliente/ClienteIntervencoesView';
+import { useRealtimeTranslation } from '../hooks/useRealtimeTranslation';
 import { IntervencaoWhatsApp } from './IntervencaoWhatsApp';
 import { WhatsAppInbox } from './WhatsAppInbox';
 import { ApchatInbox } from './ApchatInbox';
@@ -159,6 +160,46 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const [novoComentario, setNovoComentario] = useState('');
   const [abaChat, setAbaChat] = useState<'ticket' | 'whatsapp' | 'apchat'>('apchat');
   const fimChatRef = useRef<HTMLDivElement>(null);
+
+  // Tradução em tempo real com Deepseek (chat interno)
+  const {
+    language,
+    setLanguage,
+    translateText,
+    autoTranslate,
+    setAutoTranslate,
+    supportedLanguages,
+    deepseekConfigured,
+  } = useRealtimeTranslation('sk-6c52be78ffeb4bde8d5066b4ac90a439');
+
+  const [traducoes, setTraducoes] = useState<Record<string, string>>({});
+  const traducoesPedidasRef = useRef<Set<string>>(new Set());
+
+  const chaveTraducao = (texto?: string) => `${language.code}:${texto || ''}`;
+
+  useEffect(() => {
+    if (!autoTranslate || !intervencaoDetalhe) return;
+
+    const textos = ((intervencaoDetalhe.comentarios || []) as any[])
+      .map((c) => c.texto)
+      .filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
+
+    textos.forEach((texto) => {
+      const chave = chaveTraducao(texto);
+      if (traducoesPedidasRef.current.has(chave)) return;
+      traducoesPedidasRef.current.add(chave);
+
+      translateText(texto, 'auto', language.code)
+        .then((traduzido) => {
+          if (traduzido && traduzido !== texto) {
+            setTraducoes((prev) => ({ ...prev, [chave]: traduzido }));
+          }
+        })
+        .catch(() => {
+          traducoesPedidasRef.current.delete(chave);
+        });
+    });
+  }, [autoTranslate, language.code, intervencaoDetalhe, translateText]);
   const [abaPrincipal, setAbaPrincipal] = useState<'tickets' | 'whatsapp' | 'apchat'>('tickets');
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
   const [visualizadorAnexo, setVisualizadorAnexo] = useState<{ url: string; nome: string; lista: { url: string; nome: string }[]; indice: number } | null>(null);
@@ -1425,14 +1466,27 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                   {/* Aba apchat (chat interno) */}
                   {abaChat === 'apchat' && (
                     <div className="space-y-4">
-                      <div>
-                        <h4 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                          <MessageSquare className="w-5 h-5 text-theme-primary" />
-                          apchat
-                        </h4>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Chat interno da aplicação — mensagens entre o cliente e a equipa, fora do WhatsApp.
-                        </p>
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <h4 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                            <MessageSquare className="w-5 h-5 text-theme-primary" />
+                            apchat
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            Chat interno da aplicação — mensagens entre o cliente e a equipa, fora do WhatsApp.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-100">
+                          <ControleTraducao
+                            compact
+                            language={language}
+                            setLanguage={setLanguage}
+                            supportedLanguages={supportedLanguages}
+                            autoTranslate={autoTranslate}
+                            setAutoTranslate={setAutoTranslate}
+                            deepseekConfigured={deepseekConfigured}
+                          />
+                        </div>
                       </div>
 
                       <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
@@ -1445,6 +1499,14 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                             <div key={com.id || i} className={`flex flex-col ${com.usuario_nome === usuario?.nome ? 'items-end' : 'items-start'}`}>
                               <div className={`max-w-[80%] p-4 rounded-2xl ${com.usuario_nome === usuario?.nome ? 'bg-theme-primary text-white' : 'bg-gray-100 text-gray-800'}`}>
                                 <p className="text-sm font-medium">{com.texto}</p>
+                                {autoTranslate && traducoes[chaveTraducao(com.texto)] && (
+                                  <p className={`mt-2 pt-2 border-t text-[13px] whitespace-pre-wrap break-words ${com.usuario_nome === usuario?.nome ? 'border-white/25 text-white/90' : 'border-gray-300 text-gray-600'}`}>
+                                    <span className="block text-[9px] font-bold uppercase tracking-widest opacity-70 mb-0.5">
+                                      Tradução · Deepseek
+                                    </span>
+                                    {traducoes[chaveTraducao(com.texto)]}
+                                  </p>
+                                )}
                               </div>
                               <span className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">
                                 {com.usuario_nome} • {new Date(com.data_criacao).toLocaleString('pt-PT')}
