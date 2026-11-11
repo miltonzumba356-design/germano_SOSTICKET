@@ -12,6 +12,9 @@ import {
   mediatypeDe,
   whatsappService,
 } from '../services/whatsappApi';
+import { useRealtimeTranslation } from '../hooks/useRealtimeTranslation';
+import { ControleTraducao } from './cliente/ClienteIntervencoesView';
+import { Languages } from 'lucide-react';
 
 /** Normaliza um telefone para o formato da Evolution (indicativo + número, só dígitos). */
 export function numeroWhatsApp(telefone?: string | null): string {
@@ -136,6 +139,100 @@ interface ChatProps {
 /** Conversa WhatsApp de um número: histórico, tempo real (WS) e envio de texto/ficheiros. */
 export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatProps) {
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
+
+  // Traducao em tempo real (Deepseek) e transcricao de audios (Whisper).
+  const {
+    language,
+    setLanguage,
+    translateText,
+    autoTranslate,
+    setAutoTranslate,
+    supportedLanguages,
+    deepseekConfigured,
+  } = useRealtimeTranslation('sk-6c52be78ffeb4bde8d5066b4ac90a439');
+  const [traducoes, setTraducoes] = useState<Record<string, string>>({});
+  const [transcricoes, setTranscricoes] = useState<Record<string, { texto: string; idioma: string }>>({});
+  const pedidosTraducaoRef = useRef<Set<string>>(new Set());
+  const pedidosTranscricaoRef = useRef<Set<string>>(new Set());
+
+  const chaveTraducao = (id: string) => `${language.code}:${id}`;
+  const chaveTraducaoAudio = (id: string) => `${language.code}:audio:${id}`;
+
+  // Traduz o texto de cada mensagem (Deepseek).
+  useEffect(() => {
+    if (!autoTranslate) return;
+    mensagens.forEach((m) => {
+      const texto = (m.texto || '').trim();
+      if (!texto) return;
+      const chave = chaveTraducao(m.id);
+      if (pedidosTraducaoRef.current.has(chave)) return;
+      pedidosTraducaoRef.current.add(chave);
+      translateText(texto, 'auto', language.code)
+        .then((traduzido) => {
+          if (traduzido && traduzido !== texto) {
+            setTraducoes((prev) => ({ ...prev, [chave]: traduzido }));
+          }
+        })
+        .catch(() => {
+          pedidosTraducaoRef.current.delete(chave);
+        });
+    });
+  }, [autoTranslate, language.code, mensagens, translateText]);
+
+  const transcreverAudio = useCallback(async (mensagem: Mensagem) => {
+    if (!mensagem.id) return;
+    const chave = mensagem.id;
+    if (pedidosTranscricaoRef.current.has(chave)) return;
+    pedidosTranscricaoRef.current.add(chave);
+    try {
+      const resultado = await whatsappService.transcrever(chave);
+      if (resultado.texto) {
+        setTranscricoes((prev) => ({
+          ...prev,
+          [chave]: { texto: resultado.texto, idioma: resultado.idioma },
+        }));
+      }
+    } catch {
+      pedidosTranscricaoRef.current.delete(chave);
+    }
+  }, []);
+
+  // Com a traducao ligada, transcreve os audios automaticamente.
+  useEffect(() => {
+    if (!autoTranslate) return;
+    mensagens.forEach((m) => {
+      const ehAudio = m.tipo === 'audio' || /\.(mp3|ogg|m4a|wav|opus|webm)(\?|$)/i.test(m.mediaUrl || '');
+      if (!ehAudio) return;
+      if (m.transcricao || transcricoes[m.id]) return;
+      void transcreverAudio(m);
+    });
+  }, [autoTranslate, mensagens, transcricoes, transcreverAudio]);
+
+  // Traduz as transcricoes dos audios (Deepseek).
+  useEffect(() => {
+    if (!autoTranslate) return;
+    const todas: Record<string, { texto: string; idioma: string }> = { ...transcricoes };
+    mensagens.forEach((m) => {
+      if (m.transcricao) {
+        todas[m.id] = { texto: m.transcricao, idioma: m.idiomaTranscricao || '' };
+      }
+    });
+    Object.entries(todas).forEach(([id, info]) => {
+      if (!info.texto) return;
+      const chave = chaveTraducaoAudio(id);
+      if (pedidosTraducaoRef.current.has(chave)) return;
+      pedidosTraducaoRef.current.add(chave);
+      translateText(info.texto, info.idioma || 'auto', language.code)
+        .then((traduzido) => {
+          if (traduzido && traduzido !== info.texto) {
+            setTraducoes((prev) => ({ ...prev, [chave]: traduzido }));
+          }
+        })
+        .catch(() => {
+          pedidosTraducaoRef.current.delete(chave);
+        });
+    });
+  }, [autoTranslate, language.code, mensagens, transcricoes, translateText]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [wsLigado, setWsLigado] = useState(false);
@@ -351,6 +448,17 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
           <p className="text-[11px] text-emerald-100">+{numero}</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/15 px-1.5 py-0.5">
+            <ControleTraducao
+              compact
+              language={language}
+              setLanguage={setLanguage}
+              supportedLanguages={supportedLanguages}
+              autoTranslate={autoTranslate}
+              setAutoTranslate={setAutoTranslate}
+              deepseekConfigured={deepseekConfigured}
+            />
+          </div>
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold" title={`${wsLigado ? 'Mensagens em tempo real' : 'A ligar ao tempo real...'} — ${WHATSAPP_WS_URL}`}>
             {wsLigado ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5 opacity-70" />}
             {wsLigado ? 'ao vivo' : '...'}
@@ -387,6 +495,58 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
                 )
               )}
               {m.texto || (!m.mediaUrl && <span className="italic text-gray-400">(sem texto)</span>)}
+
+              {/* Traducao Deepseek do texto da mensagem */}
+              {autoTranslate && traducoes[chaveTraducao(m.id)] && (
+                <p className="mt-1.5 pt-1.5 border-t border-black/10 text-[12px] whitespace-pre-wrap break-words text-violet-700">
+                  <span className="block text-[9px] font-black uppercase tracking-widest text-violet-500 mb-0.5">
+                    Traducao · Deepseek
+                  </span>
+                  {traducoes[chaveTraducao(m.id)]}
+                </p>
+              )}
+
+              {/* Transcricao Whisper do audio + traducao */}
+              {(() => {
+                const ehAudio = m.tipo === 'audio' || /\.(mp3|ogg|m4a|wav|opus|webm)(\?|$)/i.test(m.mediaUrl || '');
+                if (!ehAudio) return null;
+                const transcricao = m.transcricao || transcricoes[m.id]?.texto || '';
+                const idioma = m.idiomaTranscricao || transcricoes[m.id]?.idioma || '';
+                const traducaoAudio = traducoes[chaveTraducaoAudio(m.id)];
+                return (
+                  <div className="mt-1.5 space-y-1.5">
+                    {transcricao ? (
+                      <div className="rounded-lg bg-gray-50 border border-gray-200 px-2 py-1.5">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-0.5">
+                          Transcricao · Whisper{idioma ? ` (${idioma})` : ''}
+                        </p>
+                        <p className="text-[12px] leading-snug text-gray-700 whitespace-pre-wrap break-words">
+                          {transcricao}
+                        </p>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void transcreverAudio(m)}
+                        className="text-[10px] font-black uppercase tracking-wide text-emerald-700 hover:text-emerald-800"
+                      >
+                        Transcrever audio
+                      </button>
+                    )}
+                    {traducaoAudio && (
+                      <div className="rounded-lg bg-violet-50 border border-violet-100 px-2 py-1.5">
+                        <p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-violet-500 mb-0.5">
+                          <Languages className="w-3 h-3" />
+                          Traducao · Deepseek
+                        </p>
+                        <p className="text-[12px] leading-snug text-violet-900 whitespace-pre-wrap break-words">
+                          {traducaoAudio}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <span className="flex items-center justify-end gap-1 mt-1 text-[10px] text-gray-500">
                 {dataHora(m.data)}
                 {m.fromMe && <CheckCheck className="w-3.5 h-3.5 text-sky-500" />}

@@ -98,6 +98,9 @@ export interface Mensagem {
   data: string | null;
   tipo?: string | null;
   mediaUrl?: string | null;
+  /** Transcricao do audio (Whisper). */
+  transcricao?: string | null;
+  idiomaTranscricao?: string | null;
   raw: unknown;
 }
 
@@ -212,6 +215,8 @@ export function normalizarMensagem(v: unknown, numeroPadrao = ''): Mensagem {
     data,
     tipo: tipoMensagem(m),
     mediaUrl: str(m.mediaUrl, m.media_url, m.url, m.message?.imageMessage?.url),
+    transcricao: str(m.transcricao, m.transcricao_texto),
+    idiomaTranscricao: str(m.idioma_transcricao, m.idiomaTranscricao),
     raw: v,
   };
 }
@@ -358,6 +363,20 @@ export function mediatypeDe(mimetype: string): 'image' | 'video' | 'audio' | 'do
 }
 
 export const whatsappService = {
+  /** POST /mensagens/{id}/transcrever — transcricao do audio com Whisper local */
+  async transcrever(id: string): Promise<{ texto: string; idioma: string; cache: boolean }> {
+    const resposta = await pedido<any>(`/mensagens/${id}/transcrever`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    const dados = resposta?.data ?? resposta ?? {};
+    return {
+      texto: String(dados.texto || ''),
+      idioma: String(dados.idioma || ''),
+      cache: Boolean(dados.cache),
+    };
+  },
+
   /** ping via conversas (Django não tem GET /) */
   async estado(): Promise<EstadoApi> {
     try {
