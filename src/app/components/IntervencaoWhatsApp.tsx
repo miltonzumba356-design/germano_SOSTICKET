@@ -448,17 +448,6 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
           <p className="text-[11px] text-emerald-100">+{numero}</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-lg bg-white/15 px-1.5 py-0.5">
-            <ControleTraducao
-              compact
-              language={language}
-              setLanguage={setLanguage}
-              supportedLanguages={supportedLanguages}
-              autoTranslate={autoTranslate}
-              setAutoTranslate={setAutoTranslate}
-              deepseekConfigured={deepseekConfigured}
-            />
-          </div>
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold" title={`${wsLigado ? 'Mensagens em tempo real' : 'A ligar ao tempo real...'} — ${WHATSAPP_WS_URL}`}>
             {wsLigado ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5 opacity-70" />}
             {wsLigado ? 'ao vivo' : '...'}
@@ -469,6 +458,22 @@ export function ChatWhatsApp({ numero, titulo, semCabecalho, preencher }: ChatPr
         </div>
       </div>
       )}
+
+      {/* Botao de traducao (idioma + ON/OFF) sempre visivel */}
+      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-white border-b border-gray-100">
+        <ControleTraducao
+          compact
+          language={language}
+          setLanguage={setLanguage}
+          supportedLanguages={supportedLanguages}
+          autoTranslate={autoTranslate}
+          setAutoTranslate={setAutoTranslate}
+          deepseekConfigured={deepseekConfigured}
+        />
+        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 shrink-0">
+          Traducao automatica
+        </span>
+      </div>
 
       <div className={`${preencher ? 'flex-1 min-h-0' : 'max-h-[400px] min-h-[220px]'} overflow-y-auto px-3 py-3 space-y-2 bg-[#efeae2]`}>
         {carregando && mensagens.length === 0 ? (
