@@ -23,6 +23,7 @@ import type { Cliente, Intervencao } from '../types/api';
 import { clientesService, intervencoesService } from '../services/api';
 import { useRealtimeTranslation } from '../hooks/useRealtimeTranslation';
 import { ControleTraducao } from './cliente/ClienteIntervencoesView';
+import { TranscricaoAudio } from './TranscricaoAudio';
 
 // apchat — chat interno com o mesmo modelo do WhatsApp:
 // lista de clientes à esquerda + conversa à direita + criar ticket na conversa.
@@ -115,9 +116,17 @@ function rotuloAnexo(a: any) {
 function BolhaAnexo({
   anexo,
   onAbrir,
+  intervencaoId,
+  autoTranslate,
+  targetLanguage,
+  translateText,
 }: {
   anexo: any;
   onAbrir: (v: { url: string; nome: string; tipo: string }) => void;
+  intervencaoId?: string;
+  autoTranslate?: boolean;
+  targetLanguage?: string;
+  translateText?: (texto: string, de: string, para: string) => Promise<string>;
 }) {
   const tipo = tipoAnexo(anexo);
   const nome = nomeAnexo(anexo);
@@ -165,6 +174,15 @@ function BolhaAnexo({
             </a>
           </div>
           <audio src={anexo.url} controls preload="metadata" className="w-full h-9" />
+          {intervencaoId && anexo?.id && translateText && (
+            <TranscricaoAudio
+              intervencaoId={intervencaoId}
+              anexo={{ id: String(anexo.id), transcricao: anexo.transcricao, idioma_transcricao: anexo.idioma_transcricao }}
+              autoTranslate={!!autoTranslate}
+              targetLanguage={targetLanguage || 'pt'}
+              translateText={translateText}
+            />
+          )}
           <p className="text-[10px] text-right mt-1 text-gray-400">{hora}</p>
         </div>
       </div>
@@ -845,7 +863,17 @@ export function ApchatInbox({
                     timeline.map((item) => {
                       // Anexos aparecem na posição cronológica, como no WhatsApp.
                       if (item.tipo === 'anexo') {
-                        return <BolhaAnexo key={item.id} anexo={item.dado} onAbrir={setVisualizador} />;
+                        return (
+                          <BolhaAnexo
+                            key={item.id}
+                            anexo={item.dado}
+                            onAbrir={setVisualizador}
+                            intervencaoId={detalhe?.id}
+                            autoTranslate={autoTranslate}
+                            targetLanguage={language.code}
+                            translateText={translateText}
+                          />
+                        );
                       }
 
                       // Primeira mensagem: a descrição do ticket.

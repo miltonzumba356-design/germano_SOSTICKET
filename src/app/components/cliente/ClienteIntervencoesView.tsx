@@ -10,6 +10,7 @@ import {
 import { usePushNotifications } from "@/app/hooks/usePushNotifications";
 import { useRealtimeTranslation } from "@/app/hooks/useRealtimeTranslation";
 import { TicketRequestsAdmin } from "../admin/TicketRequestsAdmin";
+import { TranscricaoAudio } from "../TranscricaoAudio";
 import type { Empresa, Intervencao } from '../../types/api';
 import { ConversaListItem } from './ConversaListItem';
 import { ConversaSkeleton } from './Skeletons';
@@ -656,6 +657,11 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
                         <AnexoBolha
                           url={item.anexo.url}
                           nome={item.anexo.nome_arquivo}
+                          intervencaoId={intervencaoDetalhe.id}
+                          anexo={item.anexo}
+                          autoTranslate={autoTranslate}
+                          targetLanguage={language.code}
+                          translateText={translateText}
                           onAbrir={() =>
                             setVisualizador({
                               lista: (intervencaoDetalhe.anexos || []).map((a: any) => ({
@@ -1114,7 +1120,25 @@ function rotuloAnexo(nome: string | undefined, tipo: ReturnType<typeof detectarT
   return nomeAnexoLimpo(nome);
 }
 
-function AnexoBolha({ url, nome, onAbrir }: { url: string; nome?: string; onAbrir: () => void }) {
+function AnexoBolha({
+  url,
+  nome,
+  onAbrir,
+  intervencaoId,
+  anexo,
+  autoTranslate,
+  targetLanguage,
+  translateText,
+}: {
+  url: string;
+  nome?: string;
+  onAbrir: () => void;
+  intervencaoId?: string;
+  anexo?: { id: string; transcricao?: string; idioma_transcricao?: string };
+  autoTranslate?: boolean;
+  targetLanguage?: string;
+  translateText?: (texto: string, de: string, para: string) => Promise<string>;
+}) {
   const tipo = detectarTipoAnexo(url, nome);
   const nomeLimpo = rotuloAnexo(nome, tipo);
 
@@ -1144,6 +1168,15 @@ function AnexoBolha({ url, nome, onAbrir }: { url: string; nome?: string; onAbri
           </div>
         </div>
         <audio src={url} controls preload="metadata" className="w-full h-9" />
+        {intervencaoId && anexo && translateText && (
+          <TranscricaoAudio
+            intervencaoId={intervencaoId}
+            anexo={anexo}
+            autoTranslate={!!autoTranslate}
+            targetLanguage={targetLanguage || 'pt'}
+            translateText={translateText}
+          />
+        )}
       </div>
     );
   }

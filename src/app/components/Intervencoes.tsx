@@ -11,6 +11,7 @@ import { useRealtimeTranslation } from '../hooks/useRealtimeTranslation';
 import { IntervencaoWhatsApp } from './IntervencaoWhatsApp';
 import { WhatsAppInbox } from './WhatsAppInbox';
 import { ApchatInbox } from './ApchatInbox';
+import { TranscricaoAudio } from './TranscricaoAudio';
 import {
   Search,
   Plus,
@@ -1592,6 +1593,29 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                             <Paperclip className="w-6 h-6" />
                           </div>
                         );
+
+                        if (tipo === 'audio') {
+                          return (
+                            <div key={i} className="p-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
+                              <div className="w-full h-16 bg-amber-50 rounded-lg flex items-center justify-center text-amber-400 mb-2">
+                                <Music className="w-6 h-6" />
+                              </div>
+                              <audio src={anexo.url} controls preload="metadata" className="w-full h-9" />
+                              <p className="text-[10px] font-bold text-gray-600 truncate mt-1">{anexo.nome_arquivo}</p>
+                              <TranscricaoAudio
+                                intervencaoId={intervencaoDetalhe.id}
+                                anexo={{
+                                  id: String(anexo.id || `a-${i}`),
+                                  transcricao: anexo.transcricao,
+                                  idioma_transcricao: anexo.idioma_transcricao,
+                                }}
+                                autoTranslate={autoTranslate}
+                                targetLanguage={language.code}
+                                translateText={translateText}
+                              />
+                            </div>
+                          );
+                        }
 
                         if (isTecnico) {
                           return (
