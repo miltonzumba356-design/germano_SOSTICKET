@@ -20,6 +20,7 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  MessageSquare,
   X
 } from 'lucide-react';
 
@@ -33,6 +34,7 @@ export function Tecnicos() {
   const [tecnicoPerformance, setTecnicoPerformance] = useState<Tecnico | null>(null);
   const [carregandoPerformance, setCarregandoPerformance] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [alternandoApchat, setAlternandoApchat] = useState<string | null>(null);
   
   // Estado do formulário de novo técnico
   const [formData, setFormData] = useState({
@@ -81,6 +83,23 @@ export function Tecnicos() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Liga/desliga o acesso do técnico ao chat interno (apchat).
+  const alternarApchat = async (tecnico: Tecnico) => {
+    setAlternandoApchat(tecnico.id);
+    try {
+      const novo = !tecnico.acesso_apchat;
+      await tecnicosService.atualizacaoParcial(tecnico.id, { acesso_apchat: novo } as any);
+      setTecnicos(prev =>
+        prev.map(t => (t.id === tecnico.id ? { ...t, acesso_apchat: novo } : t))
+      );
+    } catch (error: any) {
+      console.error('Erro ao alterar acesso ao apchat:', error);
+      setErro('Não foi possível alterar o acesso ao chat interno.');
+    } finally {
+      setAlternandoApchat(null);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -226,6 +245,26 @@ export function Tecnicos() {
                       ))
                   }
                 </div>
+
+                {/* Permissões: acesso ao chat interno (apchat) */}
+                <button
+                  type="button"
+                  onClick={() => alternarApchat(tecnico)}
+                  disabled={alternandoApchat === tecnico.id}
+                  title="Autorizar ou retirar o acesso ao chat interno (apchat). O técnico não tem WhatsApp, comunica aqui."
+                  className={`mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-60 ${
+                    tecnico.acesso_apchat
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                      : 'bg-gray-100 text-gray-500 border border-gray-200'
+                  }`}
+                >
+                  {alternandoApchat === tecnico.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <MessageSquare className="w-3.5 h-3.5" />
+                  )}
+                  Chat interno (apchat): {tecnico.acesso_apchat ? 'AUTORIZADO' : 'BLOQUEADO'}
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50">

@@ -99,6 +99,8 @@ export interface Tecnico extends Usuario {
   total_horas_mes?: number | string;
   data_contratacao?: string | null;
   historico_intervencoes?: Record<string, unknown>[];
+  /** Acesso autorizado ao chat interno (apchat). */
+  acesso_apchat?: boolean;
 }
 
 export interface Contrato {

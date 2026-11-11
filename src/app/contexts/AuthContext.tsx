@@ -12,6 +12,10 @@ interface Usuario {
   perfil: TipoPerfil;
   telefone?: string;
   avatar_url?: string;
+  /** Preferências do utilizador (ex.: acesso_apchat para técnicos). */
+  preferencias?: Record<string, unknown>;
+  /** Acesso autorizado ao chat interno (apchat). */
+  acesso_apchat?: boolean;
 }
 
 // Interface do contexto de autenticaÃ§Ã£o
@@ -35,6 +39,13 @@ function normalizarUsuario(dadosUsuario: any, emailFallback?: string): Usuario {
     perfil: dadosUsuario?.perfil || dadosUsuario?.role || 'cliente',
     telefone: dadosUsuario?.telefone,
     avatar_url: dadosUsuario?.avatar_url,
+    preferencias: dadosUsuario?.preferencias || {},
+    acesso_apchat:
+      dadosUsuario?.acesso_apchat !== undefined
+        ? Boolean(dadosUsuario?.acesso_apchat)
+        : dadosUsuario?.preferencias?.acesso_apchat !== undefined
+          ? Boolean(dadosUsuario?.preferencias?.acesso_apchat)
+          : (dadosUsuario?.perfil || dadosUsuario?.role) !== 'tecnico',
   };
 }
 

@@ -22,6 +22,7 @@ import {
 import type { Cliente, Intervencao } from '../types/api';
 import { clientesService, intervencoesService } from '../services/api';
 import { useRealtimeTranslation } from '../hooks/useRealtimeTranslation';
+import { useAuth } from '../contexts/AuthContext';
 import { ControleTraducao } from './cliente/ClienteIntervencoesView';
 import { TranscricaoAudio } from './TranscricaoAudio';
 
@@ -256,12 +257,16 @@ export function ApchatInbox({
 }: Props) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [intervencoes, setIntervencoes] = useState<Intervencao[]>([]);
+  const { usuario } = useAuth();
+  const ehTecnico = usuario?.perfil === 'tecnico';
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [pesquisa, setPesquisa] = useState('');
 
   const [clienteSel, setClienteSel] = useState<Cliente | null>(null);
   const [detalhe, setDetalhe] = useState<Intervencao | null>(null);
+  // Só o técnico atribuído à intervenção pode escrever; os restantes apenas leem.
+  const podeEscrever = !ehTecnico || (!!detalhe && detalhe.tecnico_id === usuario?.id);
   const [carregandoConversa, setCarregandoConversa] = useState(false);
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -820,13 +825,15 @@ export function ApchatInbox({
                     setAutoTranslate={setAutoTranslate}
                     deepseekConfigured={deepseekConfigured}
                   />
-                  <button
-                    type="button"
-                    onClick={abrirModalTicket}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-theme-primary text-white text-xs font-bold shadow-sm hover:bg-theme-primary-hover transition-colors"
-                  >
-                    <Plus className="w-4 h-4" /> Criar ticket
-                  </button>
+                  {!ehTecnico && (
+                    <button
+                      type="button"
+                      onClick={abrirModalTicket}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-theme-primary text-white text-xs font-bold shadow-sm hover:bg-theme-primary-hover transition-colors"
+                    >
+                      <Plus className="w-4 h-4" /> Criar ticket
+                    </button>
+                  )}
                 </header>
 
                 {/* Mensagens */}
@@ -840,13 +847,15 @@ export function ApchatInbox({
                           Cria um ticket para começar a conversa com este cliente.
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={abrirModalTicket}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-theme-primary text-white text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-theme-primary-hover transition-colors"
-                      >
-                        <Plus className="w-4 h-4" /> Criar ticket
-                      </button>
+                      {!ehTecnico && (
+                        <button
+                          type="button"
+                          onClick={abrirModalTicket}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-theme-primary text-white text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-theme-primary-hover transition-colors"
+                        >
+                          <Plus className="w-4 h-4" /> Criar ticket
+                        </button>
+                      )}
                     </div>
                   ) : carregandoConversa ? (
                     <div className="h-full flex items-center justify-center gap-2 text-gray-500">
@@ -948,7 +957,14 @@ export function ApchatInbox({
                 </div>
 
                 {/* Composer */}
-                {intervencaoSelecionada && (
+                {intervencaoSelecionada && !podeEscrever && (
+                  <div className="border-t border-gray-100 bg-white px-4 py-3">
+                    <p className="text-[11px] text-gray-500">
+                      Apenas o técnico atribuído a esta intervenção pode escrever. Está a consultar em modo leitura.
+                    </p>
+                  </div>
+                )}
+                {intervencaoSelecionada && podeEscrever && (
                   <form onSubmit={enviar} className="border-t border-gray-100 bg-white">
                     {erroAudio && (
                       <p className="px-4 pt-2 text-[11px] font-medium text-red-600">{erroAudio}</p>

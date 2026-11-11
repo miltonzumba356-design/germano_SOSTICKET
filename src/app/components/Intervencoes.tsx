@@ -133,6 +133,9 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const isAdmin = usuario?.perfil === 'admin';
   const isTecnico = usuario?.perfil === 'tecnico';
   const isCliente = usuario?.perfil === 'cliente';
+  // O técnico não tem WhatsApp: usa o chat interno (apchat) e só se estiver autorizado.
+  const apchatAutorizado = !isTecnico || usuario?.acesso_apchat === true;
+  const podeUsarWhatsApp = !isTecnico;
   const [intervencoes, setIntervencoes] = useState<Intervencao[]>([]);
   const [busca, setBusca] = useState('');
   const [carregando, setCarregando] = useState(true);
@@ -160,6 +163,16 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const [intervencaoDetalhe, setIntervencaoDetalhe] = useState<Intervencao | null>(null);
   const [novoComentario, setNovoComentario] = useState('');
   const [abaChat, setAbaChat] = useState<'ticket' | 'whatsapp' | 'apchat'>('apchat');
+
+  // Só o técnico atribuído à intervenção pode escrever no chat interno.
+  const podeComentar =
+    !isTecnico || (!!intervencaoDetalhe && intervencaoDetalhe.tecnico_id === usuario?.id);
+
+  // Sem WhatsApp para técnicos e sem apchat sem autorização: cair para a aba Ticket.
+  useEffect(() => {
+    if (!apchatAutorizado && abaChat === 'apchat') setAbaChat('ticket');
+    if (!podeUsarWhatsApp && abaChat === 'whatsapp') setAbaChat('ticket');
+  }, [abaChat, apchatAutorizado, podeUsarWhatsApp]);
   const fimChatRef = useRef<HTMLDivElement>(null);
 
   // Tradução em tempo real com Deepseek (chat interno)
@@ -1064,7 +1077,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         </div>
       )}
 
-      {/* Separadores: Tickets | WhatsApp (admin/técnico) */}
+      {/* Separadores: Tickets | WhatsApp (admin/cliente) | apchat (autorizados) */}
       <div className="inline-flex rounded-xl bg-white border border-gray-100 shadow-sm p-1 text-sm font-bold">
         <button
           type="button"
@@ -1073,30 +1086,34 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
         >
           <Ticket className="w-4 h-4" /> Tickets
         </button>
-        <button
-          type="button"
-          onClick={() => setAbaPrincipal('whatsapp')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${abaPrincipal === 'whatsapp' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
-        >
-          <MessageSquare className="w-4 h-4" /> WhatsApp
-        </button>
-        <button
-          type="button"
-          onClick={() => setAbaPrincipal('apchat')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${abaPrincipal === 'apchat' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
-        >
-          <MessageSquare className="w-4 h-4" /> apchat
-        </button>
+        {podeUsarWhatsApp && (
+          <button
+            type="button"
+            onClick={() => setAbaPrincipal('whatsapp')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${abaPrincipal === 'whatsapp' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            <MessageSquare className="w-4 h-4" /> WhatsApp
+          </button>
+        )}
+        {apchatAutorizado && (
+          <button
+            type="button"
+            onClick={() => setAbaPrincipal('apchat')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${abaPrincipal === 'apchat' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            <MessageSquare className="w-4 h-4" /> apchat
+          </button>
+        )}
       </div>
 
-      {abaPrincipal === 'apchat' && (
+      {abaPrincipal === 'apchat' && apchatAutorizado && (
         <ApchatInbox
           usuarioNome={usuario?.nome}
           onTicketCriado={() => carregarIntervencoes(true)}
         />
       )}
 
-      {abaPrincipal === 'whatsapp' && (
+      {abaPrincipal === 'whatsapp' && podeUsarWhatsApp && (
         <WhatsAppInbox
           podeCriarTicket={isAdmin}
           onAbrirTicket={(id) => handleVerDetalhes(id)}
@@ -1408,22 +1425,26 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                       <Ticket className="w-4 h-4" />
                       Ticket
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setAbaChat('whatsapp')}
-                      className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl transition-colors ${abaChat === 'whatsapp' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      WhatsApp
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAbaChat('apchat')}
-                      className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl transition-colors ${abaChat === 'apchat' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      apchat ({intervencaoDetalhe.comentarios?.length || 0})
-                    </button>
+                    {podeUsarWhatsApp && (
+                      <button
+                        type="button"
+                        onClick={() => setAbaChat('whatsapp')}
+                        className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl transition-colors ${abaChat === 'whatsapp' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        WhatsApp
+                      </button>
+                    )}
+                    {apchatAutorizado && (
+                      <button
+                        type="button"
+                        onClick={() => setAbaChat('apchat')}
+                        className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl transition-colors ${abaChat === 'apchat' ? 'bg-theme-primary text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        apchat ({intervencaoDetalhe.comentarios?.length || 0})
+                      </button>
+                    )}
                   </div>
 
                   {/* Aba Ticket */}
@@ -1518,21 +1539,28 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                         <div ref={fimChatRef} />
                       </div>
 
-                      <form onSubmit={handleEnviarComentario} className="flex gap-2">
-                        <input 
-                          type="text"
-                          value={novoComentario}
-                          onChange={(e) => setNovoComentario(e.target.value)}
-                          placeholder="Escreva uma mensagem..."
-                          className="flex-1 px-5 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
-                        />
-                        <button 
-                          type="submit"
-                          className="p-4 bg-theme-primary text-white rounded-2xl hover:bg-theme-primary-hover shadow-lg shadow-indigo-100 transition-all"
-                        >
-                          <ArrowRight className="w-6 h-6" />
-                        </button>
-                      </form>
+                      {!podeComentar ? (
+                        <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
+                          Apenas o técnico atribuído a esta intervenção pode escrever no chat interno.
+                          Pode consultar a descrição, os anexos e a transcrição dos áudios.
+                        </p>
+                      ) : (
+                        <form onSubmit={handleEnviarComentario} className="flex gap-2">
+                          <input 
+                            type="text"
+                            value={novoComentario}
+                            onChange={(e) => setNovoComentario(e.target.value)}
+                            placeholder="Escreva uma mensagem..."
+                            className="flex-1 px-5 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-theme-primary focus:ring-0 transition-all text-sm font-medium"
+                          />
+                          <button 
+                            type="submit"
+                            className="p-4 bg-theme-primary text-white rounded-2xl hover:bg-theme-primary-hover shadow-lg shadow-indigo-100 transition-all"
+                          >
+                            <ArrowRight className="w-6 h-6" />
+                          </button>
+                        </form>
+                      )}
                     </div>
                   )}
                 </div>
