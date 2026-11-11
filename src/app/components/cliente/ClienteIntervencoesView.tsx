@@ -5,7 +5,7 @@ import {
   CheckCircle2, AlertCircle, FileText, Film, MessageCircle,
   Pencil, Trash2, Clock, ArrowLeft, SlidersHorizontal, Check,
   Bot, ClipboardList, UploadCloud, Image as ImageIcon,
-  Download, ChevronLeft, ChevronRight, Music, Mic, Languages, Bell,
+  Download, ChevronLeft, ChevronRight, Music, Mic, Languages, Bell, Mail,
 } from 'lucide-react';
 import { usePushNotifications } from "@/app/hooks/usePushNotifications";
 import { useRealtimeTranslation } from "@/app/hooks/useRealtimeTranslation";

@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   Calendar,
+  CalendarDays,
   Clock,
   Building2,
   MessageCircle,
