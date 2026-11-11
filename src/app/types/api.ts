@@ -103,6 +103,27 @@ export interface Tecnico extends Usuario {
   acesso_apchat?: boolean;
 }
 
+/** Pedido para intervir numa intervenção (aprovado pelo administrador). */
+export interface SolicitacaoIntervencao {
+  id: string;
+  intervencao: string;
+  intervencao_numero?: string | number;
+  intervencao_titulo?: string;
+  intervencao_status?: string;
+  cliente_nome?: string | null;
+  tecnico_responsavel?: string | null;
+  utilizador: string;
+  utilizador_nome?: string;
+  tipo?: 'intervencao' | 'acesso';
+  justificativa?: string;
+  estado?: 'pendente' | 'aprovado' | 'rejeitado';
+  respondido_por?: string | null;
+  respondido_por_nome?: string | null;
+  data_resposta?: string | null;
+  motivo?: string;
+  data_criacao?: string;
+}
+
 export interface Contrato {
   id: string;
   numero?: string;

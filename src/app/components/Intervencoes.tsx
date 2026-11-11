@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { useRealtimeSignal } from '../hooks/useRealtimeSignal';
 import { Intervencao } from '../types/api';
 import type { Cliente } from '../types/api';
@@ -12,6 +13,8 @@ import { IntervencaoWhatsApp } from './IntervencaoWhatsApp';
 import { WhatsAppInbox } from './WhatsAppInbox';
 import { ApchatInbox } from './ApchatInbox';
 import { TranscricaoAudio } from './TranscricaoAudio';
+import { SolicitarIntervencaoModal } from './SolicitarIntervencaoModal';
+import { SolicitacoesIntervencaoAdmin } from './admin/SolicitacoesIntervencaoAdmin';
 import {
   Search,
   Plus,
@@ -144,6 +147,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
   const [totalPaginas, setTotalPaginas] = useState(1);
   const [filtroStatus, setFiltroStatus] = useState<string>('');
   const [filtroPrioridade, setFiltroPrioridade] = useState<string>('');
+  // Tecnico: 'Minhas' (so as dele) ou 'Todas' (toda a equipa, para pedir intervencao).
+  const [verTodasIntervencoes, setVerTodasIntervencoes] = useState(false);
   const [exibirModalNovo, setExibirModalNovo] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [contratos, setContratos] = useState<any[]>([]);
@@ -160,6 +165,8 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
     anexos: [] as File[]
   });
   const [exibirModalDetalhes, setExibirModalDetalhes] = useState(false);
+  const [pedidoIntervencao, setPedidoIntervencao] = useState<Intervencao | null>(null);
+  const [exibirSolicitacoes, setExibirSolicitacoes] = useState(false);
   const [intervencaoDetalhe, setIntervencaoDetalhe] = useState<Intervencao | null>(null);
   const [novoComentario, setNovoComentario] = useState('');
   const [abaChat, setAbaChat] = useState<'ticket' | 'whatsapp' | 'apchat'>('apchat');
@@ -240,18 +247,23 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
     data_fim_intervencao: '',
   });
 
-  const carregarIntervencoes = async (silencioso = false) => {
+  const carregarIntervencoes = async (silencioso = false, mostrarTodasOverride?: boolean) => {
     if (!silencioso) setCarregando(true);
     setErro('');
     try {
       const isTecnicoPerfil = usuario?.perfil === 'tecnico';
+      const mostrarTodas = isTecnicoPerfil
+        ? (mostrarTodasOverride === undefined ? verTodasIntervencoes : mostrarTodasOverride)
+        : false;
+      const soMinhas = isTecnicoPerfil && !mostrarTodas;
       const response = await intervencoesService.listar({ 
         page: pagina,
         limit: 10,
         search: busca || undefined,
         status: filtroStatus || undefined,
         prioridade: filtroPrioridade || undefined,
-        tecnico_id: isTecnicoPerfil ? usuario?.id : undefined,
+        tecnico_id: soMinhas ? usuario?.id : undefined,
+        apenas_minhas: soMinhas ? 'true' : undefined,
         cliente_id: isCliente ? usuario?.id : undefined
       });
       
@@ -341,7 +353,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
     if (isCliente || isAdmin) carregarContratos();
     if (isAdmin) carregarClientes();
     if (isAdmin) carregarTecnicos();
-  }, [pagina, filtroStatus, filtroPrioridade]);
+  }, [pagina, filtroStatus, filtroPrioridade, verTodasIntervencoes]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1078,6 +1090,7 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
       )}
 
       {/* Separadores: Tickets | WhatsApp (admin/cliente) | apchat (autorizados) */}
+      <div className="flex items-center gap-3 flex-wrap">
       <div className="inline-flex rounded-xl bg-white border border-gray-100 shadow-sm p-1 text-sm font-bold">
         <button
           type="button"
@@ -1104,6 +1117,17 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
             <MessageSquare className="w-4 h-4" /> apchat
           </button>
         )}
+      </div>
+
+      {isAdmin && (
+        <button
+          type="button"
+          onClick={() => setExibirSolicitacoes(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-sm font-bold hover:bg-amber-100 transition-colors"
+        >
+          <ShieldCheck className="w-4 h-4" /> Pedidos de intervenção
+        </button>
+      )}
       </div>
 
       {abaPrincipal === 'apchat' && apchatAutorizado && (
@@ -1159,6 +1183,22 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
               <option value="media">MÉDIA</option>
               <option value="baixa">BAIXA</option>
             </select>
+            {isTecnico && (
+              <select
+                value={verTodasIntervencoes ? 'todas' : 'minhas'}
+                onChange={(e) => {
+                  const valor = e.target.value === 'todas';
+                  setVerTodasIntervencoes(valor);
+                  setPagina(1);
+                  // Recarrega de imediato (a pagina pode ja estar na 1).
+                  carregarIntervencoes(true, valor);
+                }}
+                className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs font-semibold text-gray-600 outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="minhas">MINHAS INTERVENÇÕES</option>
+                <option value="todas">TODAS (EQUIPA)</option>
+              </select>
+            )}
             <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50">
               <Filter className="w-5 h-5" />
             </button>
@@ -1246,7 +1286,19 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
                        Assumir
                      </button>
                    )}
-                   <button 
+                   {isTecnico && (intervencao as any).tecnico_id && (intervencao as any).tecnico_id !== usuario?.id && (
+                     <button
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         setPedidoIntervencao(intervencao);
+                       }}
+                       className="px-3 py-2 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                       title="Pedir ao administrador para poder intervir neste atendimento"
+                     >
+                       Solicitar intervenção
+                     </button>
+                   )}
+                   <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleVerDetalhes(intervencao.id);
@@ -2055,6 +2107,24 @@ export function Intervencoes({ onNavigate }: { onNavigate?: (pagina: string) => 
             </form>
           </div>
         </div>
+      )}
+
+      {pedidoIntervencao && (
+        <SolicitarIntervencaoModal
+          intervencaoId={pedidoIntervencao.id}
+          intervencaoNumero={pedidoIntervencao.numero}
+          intervencaoTitulo={pedidoIntervencao.titulo}
+          responsavel={pedidoIntervencao.tecnico_nome}
+          onFechar={() => setPedidoIntervencao(null)}
+          onEnviado={() => toast.success('Pedido de intervenção enviado ao administrador.')}
+        />
+      )}
+
+      {exibirSolicitacoes && (
+        <SolicitacoesIntervencaoAdmin
+          onClose={() => setExibirSolicitacoes(false)}
+          onRespondido={() => carregarIntervencoes(true)}
+        />
       )}
     </div>
   );

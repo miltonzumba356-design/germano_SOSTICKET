@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { usePushNotifications } from "@/app/hooks/usePushNotifications";
 import { useRealtimeTranslation } from "@/app/hooks/useRealtimeTranslation";
-import { TicketRequestsAdmin } from "../admin/TicketRequestsAdmin";
+import { SolicitacoesIntervencaoAdmin } from "../admin/SolicitacoesIntervencaoAdmin";
+import { intervencoesService, solicitacoesService } from '../../services/api';
 import { TranscricaoAudio } from "../TranscricaoAudio";
 import type { Empresa, Intervencao } from '../../types/api';
 import { ConversaListItem } from './ConversaListItem';
@@ -184,25 +185,20 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
     setSolicitandoAcesso(true);
     setSolicitacaoResultado(null);
     try {
-      const response = await fetch(`${API_BASE}/${intervencaoId}/request-access/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          intervencao_id: intervencaoId,
-          tipo: 'acesso',
-          justificativa: 'Solicitação de acesso ao atendimento via sistema'
-        }),
+      await solicitacoesService.criar({
+        intervencao_id: intervencaoId,
+        tipo: 'acesso',
+        justificativa: 'Pedido de acesso ao atendimento via sistema',
       });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setSolicitacaoResultado({ tipo: 'sucesso', mensagem: result.message || 'Solicitação enviada para aprovação' });
-      } else {
-        setSolicitacaoResultado({ tipo: 'erro', mensagem: result.erro || 'Erro ao solicitar acesso' });
-      }
+      setSolicitacaoResultado({
+        tipo: 'sucesso',
+        mensagem: 'Pedido enviado ao administrador. Aguarda aprovacao.',
+      });
     } catch (error: any) {
-      setSolicitacaoResultado({ tipo: 'erro', mensagem: error.message || 'Erro de rede' });
+      setSolicitacaoResultado({
+        tipo: 'erro',
+        mensagem: error?.message || 'Erro ao solicitar acesso',
+      });
     } finally {
       setSolicitandoAcesso(false);
     }
@@ -212,22 +208,15 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
     setAssumindoTicket(true);
     setSolicitacaoResultado(null);
     try {
-      const response = await fetch(`${API_BASE}/${intervencaoId}/assume/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setSolicitacaoResultado({ tipo: 'sucesso', mensagem: result.message || 'Ticket assumido com sucesso!' });
-        // Recarregar detalhes após assumir
-        if (handleVerDetalhes) handleVerDetalhes(intervencaoId);
-      } else {
-        setSolicitacaoResultado({ tipo: 'erro', mensagem: result.erro || 'Erro ao assumir ticket' });
-      }
+      await intervencoesService.assumir(intervencaoId);
+      setSolicitacaoResultado({ tipo: 'sucesso', mensagem: 'Ticket assumido com sucesso!' });
+      // Recarregar detalhes apos assumir
+      if (handleVerDetalhes) handleVerDetalhes(intervencaoId);
     } catch (error: any) {
-      setSolicitacaoResultado({ tipo: 'erro', mensagem: error.message || 'Erro de rede' });
+      setSolicitacaoResultado({
+        tipo: 'erro',
+        mensagem: error?.message || 'Erro ao assumir ticket',
+      });
     } finally {
       setAssumindoTicket(false);
     }
@@ -816,12 +805,9 @@ export function ClienteIntervencoesView(props: ClienteIntervencoesViewProps) {
 
         {/* Admin: Modal de Solicitações Pendentes */}
         {adminModalAberto && (
-          <TicketRequestsAdmin
+          <SolicitacoesIntervencaoAdmin
             onClose={() => setAdminModalAberto(false)}
-            onRequestApproved={(intervencaoId, tecnicoId) => {
-              // Recarregar detalhes após aprovação
-              if (handleVerDetalhes) handleVerDetalhes(String(intervencaoId));
-            }}
+            onRespondido={() => handleVerDetalhes && handleVerDetalhes(intervencaoDetalhe?.id)}
           />
         )}
       </div>

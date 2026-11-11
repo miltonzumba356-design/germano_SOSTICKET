@@ -7,6 +7,7 @@ import {
   Intervencao,
   Notificacao,
   RespostaPaginada,
+  SolicitacaoIntervencao,
   Tecnico,
   Usuario,
 } from '../types/api';
@@ -499,6 +500,23 @@ export const intervencoesService = {
   atribuirTecnico: (id: string, tecnico_id: string) =>
     create(`/intervencoes/${id}/atribuir`, { tecnico_id }),
   assumir: (id: string) => create(`/intervencoes/${id}/assumir`, {}),
+};
+
+/** Pedidos para intervir numa intervenção (aprovação do administrador). */
+export const solicitacoesService = {
+  listar: (params?: QueryParams) => list<SolicitacaoIntervencao>('/solicitacoes', params),
+  criar: (dados: { intervencao_id: string; tipo?: string; justificativa?: string }) =>
+    create<SolicitacaoIntervencao>('/solicitacoes', dados),
+  aprovar: (id: string, motivo?: string) =>
+    fetchAPI<SolicitacaoIntervencao>(`/solicitacoes/${id}/aprovar/`, {
+      method: 'POST',
+      body: JSON.stringify({ motivo: motivo || '' }),
+    }),
+  rejeitar: (id: string, motivo?: string) =>
+    fetchAPI<SolicitacaoIntervencao>(`/solicitacoes/${id}/rejeitar/`, {
+      method: 'POST',
+      body: JSON.stringify({ motivo: motivo || '' }),
+    }),
 };
 
 export const configuracoesService = {
