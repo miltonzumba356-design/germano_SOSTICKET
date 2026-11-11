@@ -12,7 +12,7 @@ const LANGUAGE_MAP: Record<string, string> = {
 };
 
 // Supported languages for the system
-const SUPPORTED_LANGUAGES = [
+export const SUPPORTED_LANGUAGES = [
   { code: 'pt', name: 'Português', native: 'Português' },
   { code: 'en', name: 'English', native: 'English' },
   { code: 'zh', name: '中文 (Mandarim)', native: '中文 (普通话)' },
